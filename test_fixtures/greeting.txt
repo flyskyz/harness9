@@ -1,0 +1,3 @@
+Hello! This is a greeting file.
+It contains a friendly message.
+The purpose of this file is to serve as a test fixture for parallel tool calling.
