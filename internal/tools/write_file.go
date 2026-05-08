@@ -85,6 +85,9 @@ func (t *WriteFileTool) Execute(ctx context.Context, args json.RawMessage) (stri
 		return "", err
 	}
 
+	unlock := LockPath(fullPath)
+	defer unlock()
+
 	// 自动创建父级目录（Auto-Mkdir），避免 LLM 因父目录缺失而反复试错。
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return "", fmt.Errorf("创建父目录失败: %w", err)

@@ -43,13 +43,12 @@ func main() {
 	// 创建Agent Engine，并关闭慢思考模式
 	eng := engine.NewAgentEngine(llm, registry, workDir, false)
 
-	prompt := `我当前目录下有一个 login.go.tmp 文件。 
-请帮我把里面 "TODO: 增加鉴权逻辑" 下面的那个 if 语句，整个替换为： 
-if user == nil {
-    fmt.Println("Forbidden!")
-    return
-}
-`
+	prompt := `请帮我并行执行以下 3 个独立任务（你可以在同一轮调用多个工具）：
+1. 读取 test_fixtures/greeting.txt 的内容
+2. 读取 test_fixtures/info.txt 的内容
+3. 运行命令：echo "hello from parallel world" && date
+
+请一次性发出所有工具调用，不要分批执行。`
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 

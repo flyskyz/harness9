@@ -1,0 +1,4 @@
+Project: harness9
+Language: Go
+Description: A lightweight, production-ready Agent Harness framework
+Status: Active Development

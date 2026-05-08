@@ -91,6 +91,9 @@ func (t *EditFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 		return "", err
 	}
 
+	unlock := LockPath(fullPath)
+	defer unlock()
+
 	contentBytes, err := os.ReadFile(fullPath)
 	if err != nil {
 		return "", fmt.Errorf("读取文件失败，请确认路径是否正确: %w", err)

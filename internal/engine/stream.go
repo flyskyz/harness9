@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/harness9/internal/schema"
 )
@@ -135,8 +136,8 @@ func (e *AgentEngine) RunStream(ctx context.Context, userPrompt string) (<-chan 
 	go func() {
 		defer close(ch)
 
-		log.Printf("[engine-stream] 启动 | workdir=%s thinking=%v maxTurns=%d toolTimeout=%v",
-			e.WorkDir, e.EnableThinking, e.MaxTurns, e.ToolTimeout)
+		log.Printf("[engine-stream] 启动 | workdir=%s thinking=%v maxTurns=%d toolTimeout=%v maxConcurrent=%d",
+			e.WorkDir, e.EnableThinking, e.MaxTurns, e.ToolTimeout, e.MaxConcurrentTools)
 
 		// 初始化对话上下文，与 Run 保持一致：
 		// 注入 system prompt（含工作区路径）定义 agent 身份，附上用户任务描述。
@@ -318,15 +319,27 @@ func (e *AgentEngine) streamPhase(ctx context.Context, ch chan<- Event, turn int
 //
 // 由于工具并发执行，EventToolResult 的顺序不固定（先完成的先发送）。
 func (e *AgentEngine) executeToolsStreaming(ctx context.Context, ch chan<- Event, turn int, toolCalls []schema.ToolCall) []schema.ToolResult {
-	log.Printf("[engine-stream] Turn %d | 执行 %d 个工具调用", turn, len(toolCalls))
+	log.Printf("[engine-stream] Turn %d | 并行执行 %d 个工具调用 (maxConcurrent=%d)", turn, len(toolCalls), e.MaxConcurrentTools)
 
 	results := make([]schema.ToolResult, len(toolCalls))
 	var wg sync.WaitGroup
+
+	// 信号量（Semaphore）：限制并发工具数，防止下游过载。
+	// 与阻塞模式 executeToolsConcurrently 保持一致。
+	var sem chan struct{}
+	if e.MaxConcurrentTools > 0 {
+		sem = make(chan struct{}, e.MaxConcurrentTools)
+	}
 
 	for i, toolCall := range toolCalls {
 		wg.Add(1)
 		go func(idx int, tc schema.ToolCall) {
 			defer wg.Done()
+
+			if sem != nil {
+				sem <- struct{}{}
+				defer func() { <-sem }()
+			}
 
 			// 为每个工具创建带独立超时的子 context。
 			// 超时不影响其他工具执行，仅将当前工具标记为失败。
@@ -341,12 +354,14 @@ func (e *AgentEngine) executeToolsStreaming(ctx context.Context, ch chan<- Event
 
 			sendEvent(ctx, ch, Event{Type: EventToolStart, Turn: turn, Data: tc})
 
+			toolStart := time.Now()
 			results[idx] = e.registry.Execute(toolCtx, tc)
+			toolDuration := time.Since(toolStart)
 
 			if results[idx].IsError {
-				log.Printf("[engine-stream] Turn %d | 工具失败 | name=%s id=%s", turn, tc.Name, tc.ID)
+				log.Printf("[engine-stream] Turn %d | 工具失败 | name=%s id=%s duration=%s", turn, tc.Name, tc.ID, toolDuration)
 			} else {
-				log.Printf("[engine-stream] Turn %d | 工具完成 | name=%s id=%s", turn, tc.Name, tc.ID)
+				log.Printf("[engine-stream] Turn %d | 工具完成 | name=%s id=%s duration=%s", turn, tc.Name, tc.ID, toolDuration)
 			}
 
 			sendEvent(ctx, ch, Event{Type: EventToolResult, Turn: turn, Data: results[idx]})

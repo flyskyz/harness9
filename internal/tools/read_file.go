@@ -80,6 +80,9 @@ func (t *ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 		return "", err
 	}
 
+	unlock := RLockPath(fullPath)
+	defer unlock()
+
 	file, err := os.Open(fullPath)
 	if err != nil {
 		return "", fmt.Errorf("打开文件失败: %w", err)
