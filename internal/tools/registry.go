@@ -22,8 +22,9 @@ import (
 // 引擎关注循环编排，Registry 关注工具生命周期管理。
 type Registry interface {
 	// Register 将一个 BaseTool 实现注册到工具表中。
-	// 若注册同名工具，后注册的会覆盖先注册的。
-	Register(tool BaseTool)
+	// 若已存在同名工具，返回 error；原有工具保持不变。
+	// 调用方需根据 error 决定是替换、忽略还是终止启动。
+	Register(tool BaseTool) error
 
 	// GetAvailableTools 返回所有已注册工具的 ToolDefinition 列表，
 	// 供 LLM 在 Generate 调用时了解可用工具集。
@@ -48,14 +49,17 @@ func NewRegistry() Registry {
 	}
 }
 
-// Register 将工具注册到注册表中。如果同名工具已存在，会记录日志并覆盖旧实现。
-func (r *registryImpl) Register(tool BaseTool) {
+// Register 将工具注册到注册表中。
+// 同名工具已存在时返回 error 且保留原实现，由调用方决定如何处理冲突
+// （静默忽略、终止启动、或先 unregister 再注册）。
+func (r *registryImpl) Register(tool BaseTool) error {
 	name := tool.Name()
 	if _, exists := r.tools[name]; exists {
-		log.Printf("[Registry] 工具 '%s' 已被注册，将被覆盖", name)
+		return fmt.Errorf("tool %q already registered", name)
 	}
 	r.tools[name] = tool
 	log.Printf("[Registry] 成功挂载工具: %s", name)
+	return nil
 }
 
 // GetAvailableTools 遍历注册表，收集所有工具的 ToolDefinition 并返回。

@@ -1,11 +1,30 @@
+// Command harness9 是 harness9 框架的命令行入口。
+//
+// 使用方式：
+//
+//	# 阻塞模式（默认）
+//	harness9 "请帮我列出当前目录下的所有 .go 文件"
+//
+//	# 流式模式
+//	harness9 -stream "请帮我列出当前目录下的所有 .go 文件"
+//
+//	# 通过标准输入提供 prompt
+//	echo "请帮我列出当前目录下的所有 .go 文件" | harness9
+//	echo "请帮我列出当前目录下的所有 .go 文件" | harness9 -stream
+//
+// 程序读取当前工作目录作为沙箱根目录，并从 .env 加载 OPENAI_API_KEY / OPENAI_BASE_URL
+// 等敏感配置。环境变量优先于 .env 文件，方便容器化部署。
 package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/harness9/internal/engine"
@@ -16,6 +35,18 @@ import (
 )
 
 func main() {
+	streamFlag := flag.Bool("stream", false, "使用流式输出模式（默认阻塞模式）")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [-stream] [prompt]\n\n"+
+			"  prompt 可作为参数传入，也可通过 stdin 传入。\n"+
+			"  示例:\n"+
+			"    %s \"列出当前目录的 .go 文件\"\n"+
+			"    %s -stream \"列出当前目录的 .go 文件\"\n"+
+			"    echo \"列出当前目录的 .go 文件\" | %s\n",
+			os.Args[0], os.Args[0], os.Args[0], os.Args[0])
+	}
+	flag.Parse()
+
 	// 绑定工作路径
 	workDir, err := os.Getwd()
 	if err != nil {
@@ -27,40 +58,71 @@ func main() {
 		log.Fatalf("[main] 加载环境配置失败: %v", err)
 	}
 
+	// 解析 prompt：优先取命令行参数，其次读 stdin
+	prompt, err := readPrompt(flag.Args())
+	if err != nil {
+		log.Fatalf("[main] 读取 prompt 失败: %v", err)
+	}
+	if prompt == "" {
+		flag.Usage()
+		os.Exit(2)
+	}
+
 	// 指定 LLMProvider
 	llm, err := provider.NewOpenAIProvider("openai/gpt-5.4-mini")
 	if err != nil {
 		log.Fatalf("[main] 创建 Provider 失败: %v", err)
 	}
 
-	// 创建ToolRegistry并注册Tools
+	// 创建 ToolRegistry 并注册内置工具
 	registry := tools.NewRegistry()
-	registry.Register(tools.NewReadFileTool(workDir))
-	registry.Register(tools.NewWriteFileTool(workDir))
-	registry.Register(tools.NewBashTool(workDir))
-	registry.Register(tools.NewEditFileTool(workDir))
+	for _, tool := range []tools.BaseTool{
+		tools.NewReadFileTool(workDir),
+		tools.NewWriteFileTool(workDir),
+		tools.NewBashTool(workDir),
+		tools.NewEditFileTool(workDir),
+	} {
+		if err := registry.Register(tool); err != nil {
+			log.Fatalf("[main] 注册工具 %s 失败: %v", tool.Name(), err)
+		}
+	}
 
-	// 创建Agent Engine，并关闭慢思考模式
-	eng := engine.NewAgentEngine(llm, registry, workDir, false)
+	// 创建 Agent Engine（默认开启 Two-Stage ReAct）
+	eng := engine.NewAgentEngine(llm, registry, workDir)
 
-	prompt := `请帮我并行执行以下 3 个独立任务（你可以在同一轮调用多个工具）：
-1. 读取 test_fixtures/greeting.txt 的内容
-2. 读取 test_fixtures/info.txt 的内容
-3. 运行命令：echo "hello from parallel world" && date
-
-请一次性发出所有工具调用，不要分批执行。`
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	useStream := len(os.Args) > 1 && os.Args[1] == "stream"
-
-	if useStream {
+	if *streamFlag {
 		fmt.Println("=== 流式调用模式 ===")
 		runStream(ctx, eng, prompt)
 	} else {
 		fmt.Println("=== 阻塞式调用模式 ===")
 		runBlocking(ctx, eng, prompt)
 	}
+}
+
+// readPrompt 解析 prompt 来源：优先合并命令行参数，若为空则从 stdin 读取（在被管道驱动时）。
+func readPrompt(args []string) (string, error) {
+	if len(args) > 0 {
+		return strings.TrimSpace(strings.Join(args, " ")), nil
+	}
+
+	// 检测 stdin 是否被重定向（非 TTY），是则读取，否则返回空
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return "", fmt.Errorf("stat stdin: %w", err)
+	}
+	if stat.Mode()&os.ModeCharDevice != 0 {
+		// stdin 仍连接终端，未提供 prompt
+		return "", nil
+	}
+
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", fmt.Errorf("read stdin: %w", err)
+	}
+	return strings.TrimSpace(string(data)), nil
 }
 
 func runBlocking(ctx context.Context, eng *engine.AgentEngine, prompt string) {

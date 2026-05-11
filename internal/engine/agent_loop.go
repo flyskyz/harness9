@@ -48,17 +48,25 @@ import (
 // Option 是 AgentEngine 的函数选项，用于在构造时配置非必需参数。
 type Option func(*AgentEngine)
 
+// WithThinking 控制是否启用两阶段 Thinking-Action 模式。默认开启（true）。
+// 关闭后退化为标准单阶段 ReAct，每个 Turn 只进行一次 LLM 调用。
+func WithThinking(enabled bool) Option {
+	return func(e *AgentEngine) {
+		e.enableThinking = enabled
+	}
+}
+
 // WithMaxTurns 设置单次 Run 允许的最大 Turn 数。n <= 0 表示不限制。
 func WithMaxTurns(n int) Option {
 	return func(e *AgentEngine) {
-		e.MaxTurns = n
+		e.maxTurns = n
 	}
 }
 
 // WithToolTimeout 设置单个工具执行的超时时间。0 表示使用 context 原始截止时间。
 func WithToolTimeout(d time.Duration) Option {
 	return func(e *AgentEngine) {
-		e.ToolTimeout = d
+		e.toolTimeout = d
 	}
 }
 
@@ -66,22 +74,24 @@ func WithToolTimeout(d time.Duration) Option {
 // 用于防止过多的并发工具调用压垮下游服务（如 API 限频、磁盘 IO 瓶颈）。
 func WithMaxConcurrentTools(n int) Option {
 	return func(e *AgentEngine) {
-		e.MaxConcurrentTools = n
+		e.maxConcurrentTools = n
 	}
 }
 
 // AgentEngine 是 harness9 agent loop 的核心编排器。它将 LLM Provider（"大脑"）
 // 与 Tool Registry（"双手"）组合在一起，执行多轮 Two-Stage ReAct 循环直到任务完成。
 //
-// 当 EnableThinking 为 true 时，每个 Turn 由两次 LLM 调用组成：
+// 当 enableThinking 为 true（默认）时，每个 Turn 由两次 LLM 调用组成：
 //
 //	Thinking 调用（tools=nil）→ Action 调用（tools=availableTools）
 //
 // 两次调用的结果会合并为一条 assistant 消息注入上下文，保证 API 兼容性。
 //
-// 当 EnableThinking 为 false 时，退化为标准单阶段 ReAct：
+// 当 enableThinking 为 false 时，退化为标准单阶段 ReAct：
 //
 //	Action 调用（tools=availableTools）
+//
+// 所有字段均为未导出，构造后不可变。通过 NewAgentEngine + Option 完成配置。
 type AgentEngine struct {
 	// provider LLM 后端，负责生成 assistant 响应（推理文本和/或工具调用请求）。
 	provider provider.LLMProvider
@@ -89,44 +99,45 @@ type AgentEngine struct {
 	// registry 工具注册表，负责将 ToolCall 解析为具体执行并返回结果。
 	registry tools.Registry
 
-	// WorkDir agent 操作的工作区绝对路径，注入到 system prompt 中使 LLM 了解其工作上下文。
-	WorkDir string
+	// workDir agent 操作的工作区绝对路径，注入到 system prompt 中使 LLM 了解其工作上下文。
+	workDir string
 
-	// EnableThinking 控制是否启用两阶段 Thinking-Action 模式。
-	// true:  每个 Turn 先进行无工具的深度思考（Phase 1），再恢复工具执行行动（Phase 2）
-	// false: 标准 ReAct 模式，每个 Turn 只进行一次 LLM 调用
-	EnableThinking bool
+	// enableThinking 控制是否启用两阶段 Thinking-Action 模式。
+	enableThinking bool
 
-	// MaxTurns 单次 Run 允许的最大 Turn 数。0 表示不限制。
+	// maxTurns 单次 Run 允许的最大 Turn 数。0 表示不限制。
 	// 防止模型陷入无限循环，消耗过多 token。
-	MaxTurns int
+	maxTurns int
 
-	// ToolTimeout 单个工具执行的超时时间。0 表示使用传入 context 的原始截止时间。
+	// toolTimeout 单个工具执行的超时时间。0 表示使用传入 context 的原始截止时间。
 	// 超时后工具执行会被取消，结果标记为 IsError。
-	ToolTimeout time.Duration
+	toolTimeout time.Duration
 
-	// MaxConcurrentTools 同一 Turn 内最大并发工具数。n <= 0 表示不限制。
-	// 防止过多的并发工具调用压垮下游服务（如 API 限频、磁盘 IO 瓶颈）。
-	MaxConcurrentTools int
+	// maxConcurrentTools 同一 Turn 内最大并发工具数。n <= 0 表示不限制。
+	maxConcurrentTools int
 }
 
 // NewAgentEngine 使用给定的 Provider、Registry 和工作目录创建新的 AgentEngine。
-// 通过 Option 函数可配置 MaxTurns、ToolTimeout 等可选参数。
+// 通过 Option 函数可配置 Thinking、MaxTurns、ToolTimeout 等可选参数。
+//
+// 默认值：
+//   - enableThinking = true（开启 Two-Stage ReAct，项目核心卖点）
+//   - maxTurns       = 50
+//   - toolTimeout    = 60s
 //
 // 参数:
-//   - p:              LLM Provider 实现（如 OpenAI、Anthropic 的适配器）
-//   - r:              Tool Registry 实现（管理工具的注册与执行）
-//   - workDir:        工作区绝对路径，注入 system prompt
-//   - enableThinking: 是否启用两阶段 Thinking-Action 模式
-//   - opts:           可选配置（WithMaxTurns, WithToolTimeout 等）
-func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, enableThinking bool, opts ...Option) *AgentEngine {
+//   - p:       LLM Provider 实现（如 OpenAI、Anthropic 的适配器）
+//   - r:       Tool Registry 实现（管理工具的注册与执行）
+//   - workDir: 工作区绝对路径，注入 system prompt
+//   - opts:    可选配置（WithThinking, WithMaxTurns, WithToolTimeout 等）
+func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, opts ...Option) *AgentEngine {
 	e := &AgentEngine{
 		provider:       p,
 		registry:       r,
-		WorkDir:        workDir,
-		EnableThinking: enableThinking,
-		MaxTurns:       50,
-		ToolTimeout:    60 * time.Second,
+		workDir:        workDir,
+		enableThinking: true,
+		maxTurns:       50,
+		toolTimeout:    60 * time.Second,
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -134,25 +145,77 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, en
 	return e
 }
 
-// Run 执行单个用户 prompt 的主循环。流程如下：
+// phase 标识 Two-Stage Turn 内 LLM 调用所属的阶段。
+type phase int
+
+const (
+	phaseThinking phase = iota // Phase 1：剥夺工具的慢思考
+	phaseAction                // Phase 2：恢复工具的精准行动；单阶段模式下也走 phaseAction
+)
+
+// emitter 封装了阻塞模式 Run 与流式模式 RunStream 在 "输出侧" 的全部差异：
 //
-//  1. 使用 system prompt（含 WorkDir）和用户初始消息初始化对话上下文
-//  2. 进入 Two-Stage ReAct 循环：
-//     a. [Phase 1] 若启用 Thinking，先以空工具列表调用 LLM，迫使模型深度思考
-//     b. [Phase 2] 以完整工具列表调用 LLM，模型基于思考结果采取行动
-//     c. 将 Thinking + Action 合并为单条 assistant 消息追加到 Context History
-//     d. 若响应不含 ToolCall，任务完成 — 退出
-//     e. 否则通过 Registry 并发执行每个请求的工具调用（带独立超时）
-//     f. 将每个工具结果作为 Observation 消息追加到上下文
-//     g. 重复步骤 2a
+//   - generate     如何执行一次 LLM 调用（阻塞 Generate 还是流式 GenerateStream）
+//   - phaseDone    阶段完成后如何展示文本（阻塞打印到 stdout，流式无需重复 — 已通过 delta 发送）
+//   - toolStart    工具开始执行时的副作用（仅日志 vs 日志 + EventToolStart）
+//   - toolDone     工具完成时的副作用（仅日志 vs 日志 + EventToolResult）
+//
+// generate / phaseDone 仅在 runLoop 主 goroutine 中调用，无并发；
+// toolStart / toolDone 在 per-tool goroutine 中并发调用，实现方需自行保证安全。
+type emitter struct {
+	generate  func(ctx context.Context, ph phase, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error)
+	phaseDone func(ph phase, turn int, content string)
+	toolStart func(turn int, tc schema.ToolCall)
+	toolDone  func(turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration)
+}
+
+// Run 执行单个用户 prompt 的阻塞式主循环。文本通过 stdout 输出，错误直接返回。
+//
+//  1. 使用 system prompt（含 workDir）和用户初始消息初始化对话上下文
+//  2. 进入 Two-Stage ReAct 循环（runLoop 内部）：
+//     a. [Phase 1] 若启用 Thinking，先以空工具列表调用 LLM
+//     b. [Phase 2] 以完整工具列表调用 LLM
+//     c. 合并 Thinking + Action 为单条 assistant 消息
+//     d. 若无 ToolCall → 任务完成
+//     e. 否则并发执行所有 ToolCall（独立超时）
+//     f. 将工具结果作为 Observation 注入上下文
+//  3. 重复直至自然终止 / MaxTurns 超限 / context 取消
+func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
+	em := emitter{
+		generate: func(ctx context.Context, _ phase, _ int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
+			return e.provider.Generate(ctx, history, tools)
+		},
+		phaseDone: func(ph phase, _ int, content string) {
+			if content == "" {
+				return
+			}
+			switch ph {
+			case phaseThinking:
+				fmt.Printf("[thinking] %s\n", content)
+			case phaseAction:
+				fmt.Printf("[assistant] %s\n", content)
+			}
+		},
+		toolStart: func(turn int, tc schema.ToolCall) {
+			log.Print(formatToolStartLog("engine", turn, tc))
+		},
+		toolDone: func(turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration) {
+			log.Print(formatToolDoneLog("engine", turn, tc, result, d))
+		},
+	}
+	return e.runLoop(ctx, userPrompt, "engine", em)
+}
+
+// runLoop 是 Run 与 RunStream 共享的主循环内核。通过 emitter 参数注入输出侧差异，
+// 自身只负责 ReAct 循环编排：上下文初始化、Turn 计数、终止条件、Two-Stage 调度、
+// 并发工具执行、Observation 注入。
 //
 // 参数：
-//   - ctx: 控制整个循环的取消和超时。若循环中途 context 被取消，
-//     挂起的工具执行和下一次 LLM 调用将响应取消信号
-//   - userPrompt: 来自人类操作者的自然语言任务描述
-func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
-	log.Printf("[engine] 启动 | workdir=%s thinking=%v maxTurns=%d toolTimeout=%v maxConcurrent=%d",
-		e.WorkDir, e.EnableThinking, e.MaxTurns, e.ToolTimeout, e.MaxConcurrentTools)
+//   - logPrefix:  日志前缀（"engine" 或 "engine-stream"），用于区分两条路径的日志
+//   - em:         输出侧差异封装
+func (e *AgentEngine) runLoop(ctx context.Context, userPrompt string, logPrefix string, em emitter) error {
+	log.Printf("[%s] 启动 | workdir=%s thinking=%v maxTurns=%d toolTimeout=%v maxConcurrent=%d",
+		logPrefix, e.workDir, e.enableThinking, e.maxTurns, e.toolTimeout, e.maxConcurrentTools)
 
 	// 初始化对话上下文：注入 system prompt（含工作区路径）定义 agent 身份和能力，
 	// 然后附上用户任务描述。
@@ -163,7 +226,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 				"You are harness9, an expert coding assistant. "+
 					"You have full access to tools in the workspace. "+
 					"Your working directory is: %s",
-				e.WorkDir,
+				e.workDir,
 			),
 		},
 		{
@@ -179,8 +242,8 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		turnCount++
 
 		// --- 安全阀：防止无限循环 ---
-		if e.MaxTurns > 0 && turnCount > e.MaxTurns {
-			return fmt.Errorf("已达最大 Turn 数 (%d)，循环终止", e.MaxTurns)
+		if e.maxTurns > 0 && turnCount > e.maxTurns {
+			return fmt.Errorf("已达最大 Turn 数 (%d)，循环终止", e.maxTurns)
 		}
 
 		// 检查 context 是否已取消（支持超时和手动中断）
@@ -192,175 +255,126 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 
 		turnStart := time.Now()
 		availableTools := e.registry.GetAvailableTools()
-
-		log.Printf("[engine] ======== Turn %d ======== | history=%d  tools=%d  thinking=%v",
-			turnCount, len(contextHistory), len(availableTools), e.EnableThinking)
+		log.Printf("[%s] ======== Turn %d ======== | history=%d  tools=%d  thinking=%v",
+			logPrefix, turnCount, len(contextHistory), len(availableTools), e.enableThinking)
 
 		llmStart := time.Now()
-		var responseMsg *schema.Message
-		var actionContent string
-
-		if e.EnableThinking {
-			var merged *schema.Message
-			var err error
-			merged, actionContent, err = e.runTwoStageTurn(ctx, turnCount, contextHistory, availableTools)
-			if err != nil {
-				return err
-			}
-			responseMsg = merged
-		} else {
-			var err error
-			responseMsg, err = e.runActionOnly(ctx, turnCount, contextHistory, availableTools)
-			if err != nil {
-				return err
-			}
-			actionContent = responseMsg.Content
+		responseMsg, err := e.runTurn(ctx, turnCount, contextHistory, availableTools, logPrefix, em)
+		if err != nil {
+			return err
 		}
-
 		llmDuration := time.Since(llmStart)
-		contextHistory = append(contextHistory, *responseMsg)
 
-		if actionContent != "" {
-			fmt.Printf("[assistant] %s\n", actionContent)
-		}
+		contextHistory = append(contextHistory, *responseMsg)
 
 		// --- 终止条件检测 ---
 		if len(responseMsg.ToolCalls) == 0 {
-			log.Printf("[engine] Turn %d | 任务完成，模型未请求工具调用 | llm=%s total=%s",
-				turnCount, llmDuration, time.Since(turnStart))
+			log.Printf("[%s] Turn %d | 任务完成，模型未请求工具调用 | llm=%s total=%s",
+				logPrefix, turnCount, llmDuration, time.Since(turnStart))
 			break
 		}
 
 		// --- ToolCall 阶段（并发执行，带独立超时） ---
 		toolStart := time.Now()
-		results := e.executeToolsConcurrently(ctx, turnCount, responseMsg.ToolCalls)
+		results := e.executeTools(ctx, turnCount, responseMsg.ToolCalls, logPrefix, em)
 		toolDuration := time.Since(toolStart)
 
 		// --- Observation 阶段 ---
 		for i, toolCall := range responseMsg.ToolCalls {
-			observationMsg := schema.Message{
+			contextHistory = append(contextHistory, schema.Message{
 				Role:       schema.RoleUser,
 				Content:    results[i].Output,
 				ToolCallID: toolCall.ID,
-			}
-			contextHistory = append(contextHistory, observationMsg)
+			})
 		}
 
-		log.Printf("[engine] Turn %d | Observation 注入完成 | history=%d | llm=%s tools=%s total=%s",
-			turnCount, len(contextHistory), llmDuration, toolDuration, time.Since(turnStart))
+		log.Printf("[%s] Turn %d | Observation 注入完成 | history=%d | llm=%s tools=%s total=%s",
+			logPrefix, turnCount, len(contextHistory), llmDuration, toolDuration, time.Since(turnStart))
 	}
 
-	log.Printf("[engine] 循环结束 | 总Turns=%d | total_time=%s", turnCount, time.Since(overallStart))
+	log.Printf("[%s] 循环结束 | 总Turns=%d | total_time=%s", logPrefix, turnCount, time.Since(overallStart))
 	return nil
 }
 
-// runTwoStageTurn 执行一个完整的两阶段 Turn（Thinking → Action），
-// 返回合并后的单条 assistant 消息和 Phase 2 的行动内容（用于显示）。
-//
-// 核心设计：Phase 1 的思考内容通过临时上下文传递给 Phase 2，
-// 但最终只合并为一条 assistant 消息注入到主 contextHistory，
-// 避免 API 兼容性问题（连续 assistant 消息）。
-//
-// 返回 error 时，调用方（Run 主循环）应立即返回该 error。
-func (e *AgentEngine) runTwoStageTurn(ctx context.Context, turn int, contextHistory []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, string, error) {
+// runTurn 执行一个完整的 Turn，根据 enableThinking 选择两阶段或单阶段路径。
+// 返回合并后的单条 assistant 消息（避免连续 assistant 消息违反 Anthropic API 约束）。
+func (e *AgentEngine) runTurn(ctx context.Context, turn int, history []schema.Message, tools []schema.ToolDefinition, logPrefix string, em emitter) (*schema.Message, error) {
+	if !e.enableThinking {
+		log.Printf("[%s] Turn %d | Action (tools=%d)", logPrefix, turn, len(tools))
+		msg, err := em.generate(ctx, phaseAction, turn, history, tools)
+		if err != nil {
+			return nil, fmt.Errorf("模型生成失败 (turn %d): %w", turn, err)
+		}
+		em.phaseDone(phaseAction, turn, msg.Content)
+		return msg, nil
+	}
+
 	// ============================================================
 	// Phase 1: Thinking（慢思考与规划）
 	// ============================================================
-	//
 	// 通过传入 nil 剥夺所有工具。LLM 没有行动能力，被迫进行纯推理。
-	// 思考结果不会直接注入主 contextHistory，而是通过临时上下文传递给 Phase 2。
-	//
-	log.Printf("[engine] Turn %d | Phase 1: Thinking (tools=none)", turn)
-
-	thinkResp, err := e.provider.Generate(ctx, contextHistory, nil)
+	log.Printf("[%s] Turn %d | Phase 1: Thinking (tools=none)", logPrefix, turn)
+	thinkResp, err := em.generate(ctx, phaseThinking, turn, history, nil)
 	if err != nil {
-		log.Printf("[engine] Turn %d | Thinking 阶段生成失败: %v", turn, err)
-		return nil, "", fmt.Errorf("thinking 阶段生成失败 (turn %d): %w", turn, err)
+		log.Printf("[%s] Turn %d | Thinking 阶段生成失败: %v", logPrefix, turn, err)
+		return nil, fmt.Errorf("thinking 阶段生成失败 (turn %d): %w", turn, err)
 	}
-
-	// 安全清除：确保 Thinking 响应不含 ToolCalls（tools=nil 时理论上不会返回，
-	// 但防御性编程可防止 LLM 不遵守指令时污染上下文）。
+	// 防御性清除：确保 Thinking 响应不含 ToolCalls，防止 LLM 不遵守指令时污染 Phase 2 上下文。
 	thinkResp.ToolCalls = nil
-
 	if thinkResp.Content != "" {
-		log.Printf("[engine] Turn %d | Phase 1 完成 | 思考长度=%d chars", turn, len(thinkResp.Content))
-		fmt.Printf("[thinking] %s\n", thinkResp.Content)
+		log.Printf("[%s] Turn %d | Phase 1 完成 | 思考长度=%d chars", logPrefix, turn, len(thinkResp.Content))
 	} else {
-		log.Printf("[engine] Turn %d | Phase 1 完成 | 思考为空", turn)
+		log.Printf("[%s] Turn %d | Phase 1 完成 | 思考为空", logPrefix, turn)
 	}
+	em.phaseDone(phaseThinking, turn, thinkResp.Content)
 
 	// ============================================================
 	// Phase 2: Action（行动与工具调用）
 	// ============================================================
-	//
-	// 构建 Phase 2 的临时上下文：在主 contextHistory 基础上追加 Phase 1 的思考。
-	// 这个临时上下文仅在本次 Generate 调用中使用，不会持久化到主 contextHistory。
-	//
-	// 这样 Phase 2 的 LLM 能"看到"思考内容并据此行动，而主上下文中
-	// 最终只保留一条合并后的 assistant 消息（思考 + 行动），
-	// 保证 user/assistant 严格交替的 API 兼容性。
-	//
-	phase2History := make([]schema.Message, len(contextHistory), len(contextHistory)+1)
-	copy(phase2History, contextHistory)
+	// 构建 Phase 2 临时上下文：主 history + Phase 1 思考；仅本次 Generate 调用使用，
+	// 不持久化到主 contextHistory。最终通过 joinContent 合并为单条 assistant 消息。
+	phase2History := make([]schema.Message, len(history), len(history)+1)
+	copy(phase2History, history)
 	phase2History = append(phase2History, *thinkResp)
 
-	log.Printf("[engine] Turn %d | Phase 2: Action (tools=%d)", turn, len(availableTools))
-
-	actionResp, err := e.provider.Generate(ctx, phase2History, availableTools)
+	log.Printf("[%s] Turn %d | Phase 2: Action (tools=%d)", logPrefix, turn, len(tools))
+	actionResp, err := em.generate(ctx, phaseAction, turn, phase2History, tools)
 	if err != nil {
-		log.Printf("[engine] Turn %d | Action 阶段生成失败: %v", turn, err)
-		return nil, "", fmt.Errorf("action 阶段生成失败 (turn %d): %w", turn, err)
+		log.Printf("[%s] Turn %d | Action 阶段生成失败: %v", logPrefix, turn, err)
+		return nil, fmt.Errorf("action 阶段生成失败 (turn %d): %w", turn, err)
 	}
+	em.phaseDone(phaseAction, turn, actionResp.Content)
 
-	// 合并 Thinking + Action 为单条 assistant 消息。
-	// 这是解决"连续 assistant 消息"问题的关键：Phase 1 的思考不会作为独立消息
-	// 留在上下文中，而是与 Phase 2 的行动合并。
-	// 在后续 Turn 中，LLM 仍然可以看到合并后的完整内容。
-	mergedMsg := &schema.Message{
+	log.Printf("[%s] Turn %d | Two-Stage 合并完成 | thinking=%d chars action=%d chars toolCalls=%d",
+		logPrefix, turn, len(thinkResp.Content), len(actionResp.Content), len(actionResp.ToolCalls))
+
+	return &schema.Message{
 		Role:      schema.RoleAssistant,
 		Content:   joinContent(thinkResp.Content, actionResp.Content),
 		ToolCalls: actionResp.ToolCalls,
-	}
-
-	log.Printf("[engine] Turn %d | Two-Stage 合并完成 | thinking=%d chars action=%d chars toolCalls=%d",
-		turn, len(thinkResp.Content), len(actionResp.Content), len(actionResp.ToolCalls))
-
-	return mergedMsg, actionResp.Content, nil
+	}, nil
 }
 
-// runActionOnly 执行标准单阶段 ReAct（EnableThinking=false 时的降级路径）。
-func (e *AgentEngine) runActionOnly(ctx context.Context, turn int, contextHistory []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, error) {
-	log.Printf("[engine] Turn %d | Action (tools=%d)", turn, len(availableTools))
+// executeTools 并发执行所有工具调用，每个工具带有独立的超时控制。
+// 通过预分配切片 + 索引写入保证结果顺序与 ToolCalls 一致。
+//
+// 并行工具调用的前提：经过 RLHF 微调的现代 LLM 在同一 Turn 内并行下发多个工具调用时，
+// 必然假设这些调用互不依赖；若存在依赖，模型会主动拆分为多个 Turn。
+func (e *AgentEngine) executeTools(ctx context.Context, turn int, toolCalls []schema.ToolCall, logPrefix string, em emitter) []schema.ToolResult {
+	log.Printf("[%s] Turn %d | 并行执行 %d 个工具调用 (maxConcurrent=%d)", logPrefix, turn, len(toolCalls), e.maxConcurrentTools)
 
-	responseMsg, err := e.provider.Generate(ctx, contextHistory, availableTools)
-	if err != nil {
-		return nil, fmt.Errorf("模型生成失败 (turn %d): %w", turn, err)
-	}
-	return responseMsg, nil
-}
-
-// executeToolsConcurrently 并发执行所有工具调用，每个工具带有独立的超时控制。
-// 通过预分配切片 + 索引写入确保结果顺序与 ToolCalls 一致。
-// 并行工具调用前提：模型的能力足够强大
-// 如果大模型在同一个 Turn（单次 Response）中并行下发了多个工具调用，Harness 引擎必须假设这些调用是互不依赖、互相独立的。引擎应当无脑并行执行它们。
-// 为什么？因为大模型在经过大量 RLHF（基于人类反馈的强化学习）微调后，它非常清楚：如果有强先后依赖的操作，必须分两个 Turn 来完成。
-func (e *AgentEngine) executeToolsConcurrently(ctx context.Context, turn int, toolCalls []schema.ToolCall) []schema.ToolResult {
-	log.Printf("[engine] Turn %d | 并行执行 %d 个工具调用 (maxConcurrent=%d)", turn, len(toolCalls), e.MaxConcurrentTools)
-
-	// 预先分配ToolResult切片，避免在goroutine中分配，导致数据竞争。
 	results := make([]schema.ToolResult, len(toolCalls))
 	var wg sync.WaitGroup
 
-	// 信号量（Semaphore）：限制并发工具数，防止下游过载。
-	// 0 表示不限制（unbounded concurrency）。
+	// 信号量：限制并发工具数，防止下游过载（API 限频、磁盘 IO 瓶颈）。
 	var sem chan struct{}
-	if e.MaxConcurrentTools > 0 {
-		sem = make(chan struct{}, e.MaxConcurrentTools)
+	if e.maxConcurrentTools > 0 {
+		sem = make(chan struct{}, e.maxConcurrentTools)
 	}
 
 	for i, toolCall := range toolCalls {
 		wg.Add(1)
-		go func(idx int, tc schema.ToolCall, currentTurn int) {
+		go func(idx int, tc schema.ToolCall) {
 			defer wg.Done()
 
 			if sem != nil {
@@ -368,23 +382,22 @@ func (e *AgentEngine) executeToolsConcurrently(ctx context.Context, turn int, to
 				defer func() { <-sem }()
 			}
 
-			// 为每个工具创建带独立超时的子 context。
-			// 超时不影响其他工具执行，仅将当前工具标记为失败。
+			// 为每个工具创建带独立超时的子 context，超时仅影响当前工具。
 			toolCtx := ctx
 			var cancel context.CancelFunc
-			if e.ToolTimeout > 0 {
-				toolCtx, cancel = context.WithTimeout(ctx, e.ToolTimeout)
+			if e.toolTimeout > 0 {
+				toolCtx, cancel = context.WithTimeout(ctx, e.toolTimeout)
 				defer cancel()
 			}
 
-			log.Print(formatToolStartLog(currentTurn, tc))
+			em.toolStart(turn, tc)
 
 			toolStart := time.Now()
 			results[idx] = e.registry.Execute(toolCtx, tc)
 			toolDuration := time.Since(toolStart)
 
-			log.Print(formatToolDoneLog(currentTurn, tc, results[idx], toolDuration))
-		}(i, toolCall, turn)
+			em.toolDone(turn, tc, results[idx], toolDuration)
+		}(i, toolCall)
 	}
 
 	wg.Wait()
@@ -432,6 +445,9 @@ const logIndent = "        "
 
 // formatToolStartLog 渲染"工具启动"日志条目。
 //
+// 参数：
+//   - logPrefix: 日志前缀（"engine" 或 "engine-stream"），与所属 runLoop 的前缀对齐。
+//
 // 输出形态示例：
 //
 //	[engine] Turn 1 │ 工具启动 │ tool=bash id=call_xyz
@@ -445,9 +461,9 @@ const logIndent = "        "
 //	            "path": "src/main.go",
 //	            "content": "package main\n..."
 //	          }
-func formatToolStartLog(turn int, tc schema.ToolCall) string {
-	header := fmt.Sprintf("[engine] Turn %d │ 工具启动 │ tool=%s id=%s",
-		turn, tc.Name, tc.ID)
+func formatToolStartLog(logPrefix string, turn int, tc schema.ToolCall) string {
+	header := fmt.Sprintf("[%s] Turn %d │ 工具启动 │ tool=%s id=%s",
+		logPrefix, turn, tc.Name, tc.ID)
 	args := formatLogJSON(tc.Arguments)
 	if strings.Contains(args, "\n") {
 		return header + "\n" + logIndent + "arguments:\n" + args
@@ -458,7 +474,8 @@ func formatToolStartLog(turn int, tc schema.ToolCall) string {
 // formatToolDoneLog 渲染"工具完成 / 工具失败"日志条目。
 //
 // 参数：
-//   - d: 工具执行的实际耗时，格式化为人类可读形式（如 "1.2s"、"50ms"）。
+//   - logPrefix: 日志前缀（"engine" 或 "engine-stream"），与所属 runLoop 的前缀对齐。
+//   - d:         工具执行的实际耗时，格式化为人类可读形式（如 "1.2s"、"50ms"）。
 //
 // 输出形态示例（成功）：
 //
@@ -472,11 +489,11 @@ func formatToolStartLog(turn int, tc schema.ToolCall) string {
 //	[engine] Turn 1 │ 工具失败 │ tool=bash id=call_xyz status=error duration=5s bytes=42
 //	        output:
 //	        │ command not found: foo
-func formatToolDoneLog(turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration) string {
-	phase := "工具完成"
+func formatToolDoneLog(logPrefix string, turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration) string {
+	phaseLabel := "工具完成"
 	status := "ok"
 	if result.IsError {
-		phase = "工具失败"
+		phaseLabel = "工具失败"
 		status = "error"
 	}
 
@@ -487,8 +504,8 @@ func formatToolDoneLog(turn int, tc schema.ToolCall, result schema.ToolResult, d
 	}
 
 	return fmt.Sprintf(
-		"[engine] Turn %d │ %s │ tool=%s id=%s status=%s duration=%s bytes=%d%s\n%soutput:\n%s",
-		turn, phase, tc.Name, tc.ID, status, d, total, truncSuffix, logIndent, body,
+		"[%s] Turn %d │ %s │ tool=%s id=%s status=%s duration=%s bytes=%d%s\n%soutput:\n%s",
+		logPrefix, turn, phaseLabel, tc.Name, tc.ID, status, d, total, truncSuffix, logIndent, body,
 	)
 }
 
@@ -528,7 +545,7 @@ func formatLogJSON(raw json.RawMessage) string {
 // encodeJSONNoEscape 使用 json.Encoder 重新编码原始 JSON，关闭 HTML 字符转义
 // （SetEscapeHTML(false)），可选启用 indent。indent=true 时使用两个空格缩进。
 func encodeJSONNoEscape(buf *bytes.Buffer, raw json.RawMessage, indent bool) error {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return err
 	}

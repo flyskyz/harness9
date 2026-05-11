@@ -85,7 +85,7 @@ type staticRegistry struct {
 	output string
 }
 
-func (r *staticRegistry) Register(_ tools.BaseTool) {}
+func (r *staticRegistry) Register(_ tools.BaseTool) error { return nil }
 
 func (r *staticRegistry) GetAvailableTools() []schema.ToolDefinition {
 	return r.tools
@@ -106,7 +106,7 @@ type errorRegistry struct {
 	output string
 }
 
-func (r *errorRegistry) Register(_ tools.BaseTool) {}
+func (r *errorRegistry) Register(_ tools.BaseTool) error { return nil }
 
 func (r *errorRegistry) GetAvailableTools() []schema.ToolDefinition {
 	return r.tools
@@ -165,7 +165,7 @@ func TestTwoStageReact_CompleteFlow(t *testing.T) {
 		output: "main.go",
 	}
 
-	eng := NewAgentEngine(p, r, "/test", true)
+	eng := NewAgentEngine(p, r, "/test")
 	err := eng.Run(context.Background(), "list files")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -205,7 +205,7 @@ func TestStandardReact_NoThinking(t *testing.T) {
 	}
 
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", false)
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
 
 	err := eng.Run(context.Background(), "hello")
 	if err != nil {
@@ -260,7 +260,7 @@ func TestMaxTurnsLimit(t *testing.T) {
 	}
 
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", false, WithMaxTurns(2))
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false), WithMaxTurns(2))
 
 	err := eng.Run(context.Background(), "loop forever")
 	if err == nil {
@@ -288,7 +288,7 @@ func TestContextCancellation(t *testing.T) {
 	}
 
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", false)
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
 
 	// 立即取消 context，模拟用户中断
 	ctx, cancel := context.WithCancel(context.Background())
@@ -315,7 +315,7 @@ func TestWorkDirInSystemPrompt(t *testing.T) {
 	}
 
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/my/custom/path", false)
+	eng := NewAgentEngine(p, r, "/my/custom/path", WithThinking(false))
 
 	_ = eng.Run(context.Background(), "test")
 
@@ -371,7 +371,7 @@ func TestMergedAssistantMessage_NoConsecutiveDuplicates(t *testing.T) {
 		tools:  []schema.ToolDefinition{{Name: "bash"}},
 		output: "ok",
 	}
-	eng := NewAgentEngine(p, r, "/test", true)
+	eng := NewAgentEngine(p, r, "/test")
 
 	_ = eng.Run(context.Background(), "test")
 
@@ -415,7 +415,7 @@ func TestToolErrorResult(t *testing.T) {
 	}
 
 	r := &errorRegistry{}
-	eng := NewAgentEngine(p, r, "/test", false)
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
 
 	err := eng.Run(context.Background(), "test error")
 	if err != nil {
@@ -448,7 +448,7 @@ func TestToolTimeout(t *testing.T) {
 
 	// 使用一个会检查 context 是否有 deadline 的 registry
 	timeoutRegistry := &timeoutCheckRegistry{}
-	eng := NewAgentEngine(p, timeoutRegistry, "/test", false, WithToolTimeout(100*time.Millisecond))
+	eng := NewAgentEngine(p, timeoutRegistry, "/test", WithThinking(false), WithToolTimeout(100*time.Millisecond))
 
 	_ = eng.Run(context.Background(), "test")
 }
@@ -456,7 +456,7 @@ func TestToolTimeout(t *testing.T) {
 // timeoutCheckRegistry 用于 TestToolTimeout，验证 Execute 收到的 context 有 deadline 设置。
 type timeoutCheckRegistry struct{}
 
-func (r *timeoutCheckRegistry) Register(_ tools.BaseTool) {}
+func (r *timeoutCheckRegistry) Register(_ tools.BaseTool) error { return nil }
 
 func (r *timeoutCheckRegistry) GetAvailableTools() []schema.ToolDefinition {
 	return nil
@@ -518,7 +518,7 @@ func TestPhase1ToolCallsSanitized(t *testing.T) {
 	}
 
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", true)
+	eng := NewAgentEngine(p, r, "/test")
 
 	_ = eng.Run(context.Background(), "test")
 

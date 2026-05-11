@@ -28,7 +28,7 @@ func TestRunStream_NormalCompletion_ReceivesEventDone(t *testing.T) {
 		},
 	}
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", false)
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
 
 	stream, err := eng.RunStream(context.Background(), "hello")
 	if err != nil {
@@ -75,7 +75,7 @@ func TestRunStream_TwoStageReact_EmitsAllEventTypes(t *testing.T) {
 		tools:  []schema.ToolDefinition{{Name: "bash"}},
 		output: "main.go",
 	}
-	eng := NewAgentEngine(p, r, "/test", true)
+	eng := NewAgentEngine(p, r, "/test")
 
 	stream, err := eng.RunStream(context.Background(), "list files")
 	if err != nil {
@@ -122,7 +122,7 @@ func TestRunStream_ContextCancellation_ReceivesEventError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // pre-cancel
 
-	eng := NewAgentEngine(p, r, "/test", false)
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
 	stream, err := eng.RunStream(ctx, "task")
 	if err != nil {
 		t.Fatalf("RunStream error: %v", err)
@@ -161,7 +161,7 @@ func TestRunStream_MaxTurns_ReceivesEventError(t *testing.T) {
 		},
 	}
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", false, WithMaxTurns(1))
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false), WithMaxTurns(1))
 
 	stream, err := eng.RunStream(context.Background(), "loop")
 	if err != nil {
@@ -204,7 +204,7 @@ func TestRunStream_ToolStartBeforeToolResult(t *testing.T) {
 		tools:  []schema.ToolDefinition{{Name: "bash"}},
 		output: "hi",
 	}
-	eng := NewAgentEngine(p, r, "/test", false)
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
 
 	stream, err := eng.RunStream(context.Background(), "test")
 	if err != nil {
@@ -246,7 +246,7 @@ func TestRunStream_EventTurnNumbering(t *testing.T) {
 		},
 	}
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", false)
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
 
 	stream, err := eng.RunStream(context.Background(), "test")
 	if err != nil {
@@ -280,7 +280,7 @@ func TestRunStream_ToolResultDataIsToolResult(t *testing.T) {
 		tools:  []schema.ToolDefinition{{Name: "bash"}},
 		output: "tool output here",
 	}
-	eng := NewAgentEngine(p, r, "/test", false)
+	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
 
 	stream, err := eng.RunStream(context.Background(), "test")
 	if err != nil {

@@ -112,7 +112,7 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, msgs []schema.Messa
 		defer close(ch)
 
 		var contentBuf strings.Builder
-		toolAccs := make(map[int]*openaiToolCallAccumulator)
+		toolAccs := newToolCallAccumulators()
 
 		for stream.Next() {
 			chunk := stream.Current()
@@ -134,14 +134,8 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, msgs []schema.Messa
 
 			for _, tc := range delta.ToolCalls {
 				idx := int(tc.Index)
-				acc := toolAccs[idx]
-				if acc == nil {
-					acc = &openaiToolCallAccumulator{index: idx}
-					toolAccs[idx] = acc
-				}
 				if tc.ID != "" {
-					acc.id = tc.ID
-					acc.name = tc.Function.Name
+					toolAccs.start(idx, tc.ID, tc.Function.Name)
 					if !sendStreamChunk(ctx, ch, schema.StreamChunk{
 						Type: schema.StreamChunkToolCallStart,
 						ToolCall: &schema.ToolCallDelta{
@@ -154,7 +148,7 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, msgs []schema.Messa
 					}
 				}
 				if tc.Function.Arguments != "" {
-					acc.args.WriteString(tc.Function.Arguments)
+					toolAccs.appendArgs(idx, tc.Function.Arguments)
 					if !sendStreamChunk(ctx, ch, schema.StreamChunk{
 						Type: schema.StreamChunkToolCallDelta,
 						ToolCall: &schema.ToolCallDelta{
@@ -177,17 +171,9 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, msgs []schema.Messa
 		}
 
 		msg := &schema.Message{
-			Role:    schema.RoleAssistant,
-			Content: contentBuf.String(),
-		}
-		for i := 0; i < len(toolAccs); i++ {
-			if acc, ok := toolAccs[i]; ok {
-				msg.ToolCalls = append(msg.ToolCalls, schema.ToolCall{
-					ID:        acc.id,
-					Name:      acc.name,
-					Arguments: []byte(acc.args.String()),
-				})
-			}
+			Role:      schema.RoleAssistant,
+			Content:   contentBuf.String(),
+			ToolCalls: toolAccs.finalize(),
 		}
 
 		sendStreamChunk(ctx, ch, schema.StreamChunk{
@@ -197,19 +183,6 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, msgs []schema.Messa
 	}()
 
 	return ch, nil
-}
-
-// openaiToolCallAccumulator 累积 OpenAI 流式响应中单个工具调用的完整信息。
-// OpenAI SDK 在流式模式下，每个工具调用的 ID/Name 和 Arguments 分多次 chunk 传输：
-//   - 首个 chunk 包含 ID 和 Name（在 tool_call_start 中发送）
-//   - 后续 chunk 包含 Arguments 的部分 JSON 文本（在 tool_call_delta 中发送）
-//
-// 使用 Index 作为 key 存储在 map 中，支持多个并行工具调用的独立累积。
-type openaiToolCallAccumulator struct {
-	index int
-	id    string
-	name  string
-	args  strings.Builder
 }
 
 // convertMessages 将内部 schema.Message 转换为 OpenAI SDK 的消息参数格式。

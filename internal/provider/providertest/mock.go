@@ -1,30 +1,40 @@
-package provider
+// Package providertest 提供 LLMProvider 的测试基础设施（test infrastructure）。
+//
+// 本包对生产二进制不可见 — 仅在测试编译单元中被引用 — 因此可以放心承载
+// 仅用于集成测试和早期开发的桩实现（Stub），不会污染发行版本。
+//
+// 典型使用：
+//
+//	import "github.com/harness9/internal/provider/providertest"
+//
+//	mock := providertest.NewMock()
+//	eng := engine.NewAgentEngine(mock, registry, workDir)
+//	err := eng.Run(ctx, "test prompt")
+package providertest
 
 import (
 	"context"
 	"sync/atomic"
 
+	"github.com/harness9/internal/provider"
 	"github.com/harness9/internal/schema"
 )
 
-// mockProvider 是 LLMProvider 的确定性桩实现，用于集成测试和早期开发。
+// mockProvider 是 LLMProvider 的确定性桩实现，模拟启用 Two-Stage ReAct 的完整对话：
 //
-// 它模拟一个启用 Two-Stage ReAct 的完整对话流程：
+//	Thinking 调用 (tools=nil)        → 模型进行深度思考
+//	Action 调用 1 (tools=[bash])    → 模型发出 bash 工具调用
+//	Action 调用 2 (tools=[bash])    → 模型返回最终文本回复，agent loop 终止
 //
-//	Thinking 调用 (tools=nil) → 模型进行深度思考
-//	Action 调用 1 (tools=[bash]) → 模型发出 bash 工具调用
-//	Action 调用 2 (tools=[bash]) → 模型返回最终文本回复，agent loop 终止
-//
-// mockProvider 是线程安全的：使用 atomic.Int32 管理内部状态，支持并发调用。
-// Generate 和 GenerateStream 共享同一套 simulateResponse 逻辑，确保行为一致。
+// 线程安全：使用 atomic.Int32 管理内部状态，支持并发调用。
+// 每个测试用例应通过 NewMock 创建独立实例，避免 turn 计数器在测试间泄漏。
 type mockProvider struct {
 	// turn 记录非 Thinking 模式下的调用次数。
 	// Thinking 阶段的调用（tools=nil）不计入 turn。
 	turn atomic.Int32
 }
 
-// Generate 实现 LLMProvider 接口的阻塞式调用。
-// 委托给 simulateResponse 生成确定性响应。
+// Generate 实现 LLMProvider 接口的阻塞式调用，委托给 simulateResponse。
 func (m *mockProvider) Generate(_ context.Context, _ []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
 	return m.simulateResponse(tools), nil
 }
@@ -33,10 +43,9 @@ func (m *mockProvider) Generate(_ context.Context, _ []schema.Message, tools []s
 // 将 simulateResponse 的结果拆分为 StreamChunk 序列通过 channel 发送：
 //   - 文本内容 → StreamChunkTextDelta（一次性发送全部文本）
 //   - 工具调用 → StreamChunkToolCallStart + StreamChunkToolCallDelta
-//   - 结束 → StreamChunkDone（含完整 Message）
+//   - 结束     → StreamChunkDone（含完整 Message）
 //
-// 这是一个简化的流式模拟：不逐 token 发送，而是一次性发送完整文本。
-// 对于测试而言足够，因为测试关心的是事件类型和顺序，而非增量粒度。
+// 简化的流式模拟：不逐 token 发送，因为测试关心的是事件类型和顺序，而非粒度。
 func (m *mockProvider) GenerateStream(ctx context.Context, _ []schema.Message, tools []schema.ToolDefinition) (<-chan schema.StreamChunk, error) {
 	msg := m.simulateResponse(tools)
 
@@ -44,17 +53,24 @@ func (m *mockProvider) GenerateStream(ctx context.Context, _ []schema.Message, t
 	go func() {
 		defer close(ch)
 
+		// send 内联了 ctx 感知的发送逻辑，避免对 provider 内部 helper 的依赖。
+		send := func(chunk schema.StreamChunk) bool {
+			select {
+			case <-ctx.Done():
+				return false
+			case ch <- chunk:
+				return true
+			}
+		}
+
 		if msg.Content != "" {
-			if !sendStreamChunk(ctx, ch, schema.StreamChunk{
-				Type:  schema.StreamChunkTextDelta,
-				Delta: msg.Content,
-			}) {
+			if !send(schema.StreamChunk{Type: schema.StreamChunkTextDelta, Delta: msg.Content}) {
 				return
 			}
 		}
 
 		for i, tc := range msg.ToolCalls {
-			if !sendStreamChunk(ctx, ch, schema.StreamChunk{
+			if !send(schema.StreamChunk{
 				Type: schema.StreamChunkToolCallStart,
 				ToolCall: &schema.ToolCallDelta{
 					Index: i,
@@ -64,7 +80,7 @@ func (m *mockProvider) GenerateStream(ctx context.Context, _ []schema.Message, t
 			}) {
 				return
 			}
-			if !sendStreamChunk(ctx, ch, schema.StreamChunk{
+			if !send(schema.StreamChunk{
 				Type: schema.StreamChunkToolCallDelta,
 				ToolCall: &schema.ToolCallDelta{
 					Index:     i,
@@ -75,10 +91,7 @@ func (m *mockProvider) GenerateStream(ctx context.Context, _ []schema.Message, t
 			}
 		}
 
-		sendStreamChunk(ctx, ch, schema.StreamChunk{
-			Type:    schema.StreamChunkDone,
-			Message: msg,
-		})
+		send(schema.StreamChunk{Type: schema.StreamChunkDone, Message: msg})
 	}()
 	return ch, nil
 }
@@ -113,8 +126,9 @@ func (m *mockProvider) simulateResponse(tools []schema.ToolDefinition) *schema.M
 	}
 }
 
-// NewMockProvider 构造并返回一个新的 mockProvider 实例。
-// turn 计数器从 0 开始，确保首次调用（Thinking 阶段除外）触发 ToolCall 响应。
-func NewMockProvider() LLMProvider {
+// NewMock 构造并返回一个新的 mockProvider 实例。
+// turn 计数器从 0 开始，确保首次 Action 阶段调用触发 ToolCall 响应。
+// 每个测试用例都应独立创建实例，避免状态污染。
+func NewMock() provider.LLMProvider {
 	return &mockProvider{}
 }

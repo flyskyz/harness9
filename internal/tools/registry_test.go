@@ -36,7 +36,9 @@ func TestNewRegistry_IsEmpty(t *testing.T) {
 
 func TestRegistry_Register_AddsDefinition(t *testing.T) {
 	r := NewRegistry()
-	r.Register(&testTool{name: "mytool"})
+	if err := r.Register(&testTool{name: "mytool"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	defs := r.GetAvailableTools()
 	if len(defs) != 1 {
 		t.Fatalf("expected 1 tool, got %d", len(defs))
@@ -46,24 +48,38 @@ func TestRegistry_Register_AddsDefinition(t *testing.T) {
 	}
 }
 
-func TestRegistry_Register_Overwrite(t *testing.T) {
+// TestRegistry_Register_DuplicateReturnsError 验证同名工具重复注册时：
+//  1. 第二次 Register 返回 error
+//  2. 原工具保持不变，未被新实现覆盖
+func TestRegistry_Register_DuplicateReturnsError(t *testing.T) {
 	r := NewRegistry()
-	r.Register(&testTool{name: "tool", output: "first"})
-	r.Register(&testTool{name: "tool", output: "second"})
+	if err := r.Register(&testTool{name: "tool", output: "first"}); err != nil {
+		t.Fatalf("first register should succeed: %v", err)
+	}
+	err := r.Register(&testTool{name: "tool", output: "second"})
+	if err == nil {
+		t.Fatal("expected error when registering duplicate tool name")
+	}
+	if !strings.Contains(err.Error(), "tool") {
+		t.Errorf("error should mention conflicting name, got: %v", err)
+	}
 
+	// 原工具保持不变（first，而非 second）
 	result := r.Execute(context.Background(), schema.ToolCall{
 		ID: "1", Name: "tool", Arguments: json.RawMessage(`{}`),
 	})
-	if result.Output != "second" {
-		t.Errorf("overwrite: expected 'second', got %q", result.Output)
+	if result.Output != "first" {
+		t.Errorf("original tool should be preserved, expected 'first', got %q", result.Output)
 	}
 }
 
 func TestRegistry_GetAvailableTools_MultipleTools(t *testing.T) {
 	r := NewRegistry()
-	r.Register(&testTool{name: "bash"})
-	r.Register(&testTool{name: "read_file"})
-	r.Register(&testTool{name: "write_file"})
+	for _, name := range []string{"bash", "read_file", "write_file"} {
+		if err := r.Register(&testTool{name: name}); err != nil {
+			t.Fatalf("register %q: %v", name, err)
+		}
+	}
 	if got := len(r.GetAvailableTools()); got != 3 {
 		t.Fatalf("expected 3 tools, got %d", got)
 	}
@@ -71,7 +87,9 @@ func TestRegistry_GetAvailableTools_MultipleTools(t *testing.T) {
 
 func TestRegistry_Execute_Success(t *testing.T) {
 	r := NewRegistry()
-	r.Register(&testTool{name: "echo", output: "hello"})
+	if err := r.Register(&testTool{name: "echo", output: "hello"}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
 
 	result := r.Execute(context.Background(), schema.ToolCall{
 		ID: "call_1", Name: "echo", Arguments: json.RawMessage(`{}`),
@@ -108,7 +126,9 @@ func TestRegistry_Execute_ToolNotFound(t *testing.T) {
 
 func TestRegistry_Execute_ToolExecutionError(t *testing.T) {
 	r := NewRegistry()
-	r.Register(&testTool{name: "broken", err: fmt.Errorf("disk full")})
+	if err := r.Register(&testTool{name: "broken", err: fmt.Errorf("disk full")}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
 
 	result := r.Execute(context.Background(), schema.ToolCall{
 		ID: "call_2", Name: "broken", Arguments: json.RawMessage(`{}`),

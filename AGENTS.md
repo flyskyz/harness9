@@ -133,14 +133,17 @@ harness9/
 │       └── main.go                  # 程序入口，组装各模块并启动引擎
 ├── internal/
 │   ├── engine/                      # Agent 核心引擎 — Two-Stage ReAct 主循环
-│   │   ├── agent_loop.go            # 阻塞式主循环（Run）+ 两阶段编排逻辑
+│   │   ├── agent_loop.go            # 共享 runLoop 主循环内核 + 阻塞式 Run + 日志格式化辅助
 │   │   ├── agent_loop_test.go       # 主循环单元测试
-│   │   └── stream.go                # 流式主循环（RunStream）+ engine.Event 事件类型
+│   │   ├── stream.go                # 流式入口 RunStream + engine.Event 事件类型
+│   │   └── stream_test.go           # 流式接口单元测试
 │   ├── provider/                    # 大模型接口抽象与具体厂商 SDK 实现
 │   │   ├── interface.go             # LLMProvider 接口定义（Generate + GenerateStream）
 │   │   ├── openai.go                # OpenAI 兼容 API 适配器（支持 OpenRouter / Azure）
 │   │   ├── anthropic.go             # Anthropic 兼容 API 适配器（Messages API）
-│   │   └── mock.go                  # 测试用 Mock Provider
+│   │   ├── tool_call_accumulator.go # OpenAI/Anthropic 共享的流式工具调用累积器
+│   │   └── providertest/            # 测试基础设施（仅在 _test 编译单元中可见）
+│   │       └── mock.go              # 确定性 mock provider（NewMock）
 │   ├── schema/                      # 跨组件共享的核心数据类型
 │   │   ├── message.go               # Message、Role、ToolCall、ToolResult、ToolDefinition
 │   │   └── stream.go                # StreamChunk、StreamChunkType（Provider 层流式类型）
@@ -148,18 +151,14 @@ harness9/
 │   │   ├── base.go                  # BaseTool 接口定义（Name / Definition / Execute）
 │   │   ├── registry.go              # 工具注册中心（Register / GetAvailableTools / Execute）
 │   │   ├── safe_path.go             # 共享路径沙箱校验（防 Path Traversal 攻击）
-│   │   ├── safe_path_test.go        # 路径沙箱单元测试
+│   │   ├── path_locker.go           # 路径级 RWMutex + 引用计数，并发文件操作保护
 │   │   ├── bash.go                  # bash 工具（Shell 命令执行，YOLO 哲学）
 │   │   ├── read_file.go             # read_file 工具（沙箱保护，4096 字节截断）
 │   │   ├── write_file.go            # write_file 工具（沙箱保护，Auto-Mkdir）
 │   │   └── edit_file.go             # edit_file 工具（多级模糊匹配文件编辑，沙箱保护）
-│   ├── env/                         # 环境配置
-│   │   ├── env.go                   # 零依赖 .env 文件加载器（系统变量优先）
-│   │   └── env_test.go              # 配置加载单元测试
-│   ├── memory/                      # 会话记忆持久化（规划中）
-│   │   └── memory.go
-│   └── feishu/                      # 飞书机器人集成（规划中）
-│       └── feishu.go
+│   └── env/                         # 环境配置
+│       ├── env.go                   # 零依赖 .env 文件加载器（系统变量优先）
+│       └── env_test.go              # 配置加载单元测试
 ├── docs/
 │   └── 核心功能/
 │       ├── agent-loop.md            # Agent Loop 核心实现原理（Two-Stage ReAct 详解）
@@ -210,8 +209,9 @@ harness9/
 | **schema** | 跨组件共享的核心数据类型（Message、ToolCall 等） | ✅ |
 | **tools** | 工具注册表 + 内置工具（bash / read_file / write_file）+ 路径沙箱 | ✅ |
 | **env** | 零依赖 `.env` 配置加载器（系统变量优先） | ✅ |
-| **memory** | 会话记忆持久化 | 🔲 规划中 |
-| **feishu** | 飞书机器人 Webhook / 事件订阅处理 | 🔲 规划中 |
+| **provider/providertest** | 测试基础设施（mock provider），不进入生产二进制 | ✅ |
+
+> **Roadmap（暂未启动）**：会话记忆持久化（memory）、飞书机器人 Webhook（feishu）。
 
 ---
 

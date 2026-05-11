@@ -1,34 +1,33 @@
-// Package engine 实现了 harness9 的核心 agent loop — 驱动
-// Two-Stage ReAct（Thinking → Action → Observation）循环的编排层。
+// Package engine — 流式输出支持。
 //
-// 本文件（stream.go）提供流式输出能力，是 agent_loop.go 中阻塞式 Run 方法的
-// 流式对应。RunStream 通过 Go channel 逐事件输出 agent loop 的运行状态，
-// 使客户端能够实时接收 LLM 逐 token 输出、工具执行进度等信息。
+// 本文件提供 RunStream 流式接口，是 agent_loop.go 中 Run 阻塞接口的流式对应。
+// RunStream 复用 runLoop 共享内核，通过 emitter 注入"输出侧"差异：
+// 将 LLM 文本增量、工具进度等以语义化 Event 通过 Go channel 推送给消费者。
 //
-// # 流式架构
+// # 双层 channel 转换
 //
-// 数据流经两层 channel 转换：
+//	Provider.GenerateStream() → chan StreamChunk → streamGenerate → chan Event → 客户端
 //
-//	Provider.GenerateStream() → chan StreamChunk → streamPhase() → chan Event → 客户端
-//
-// Provider 层产出底层的 token 级增量（StreamChunk），引擎层将其转化为面向客户端的
-// 语义事件（Event），客户端只需关心业务含义，无需处理 SDK 差异。
+// Provider 层产出底层 token 级增量（StreamChunk），引擎层将其转化为面向客户端的语义
+// 事件（Event）。客户端只需关心业务含义，不必感知 SDK 差异。
 //
 // # 与阻塞模式的关系
 //
-// RunStream 与 Run 共享相同的 Two-Stage ReAct 循环逻辑和配置（MaxTurns、ToolTimeout
-// 等），但有以下关键区别：
-//   - Run 使用 provider.Generate（阻塞式），RunStream 使用 provider.GenerateStream（流式）
-//   - Run 通过 fmt.Printf 直接输出文本到 stdout，RunStream 通过 Event channel 输出
-//   - Run 在循环结束后返回 error，RunStream 通过 EventError 事件报告错误
-//   - 两种模式使用不同的日志前缀：[engine] vs [engine-stream]
+// Run 与 RunStream 共享：
+//   - runLoop 主循环骨架（Turn 计数、终止条件、Two-Stage 编排、并发工具执行）
+//   - 工具执行日志格式化（formatToolStartLog / formatToolDoneLog）
+//
+// 仅在 emitter 回调中体现差异：
+//   - generate:   阻塞调用 Provider.Generate vs 流式调用 GenerateStream 并转发 delta
+//   - phaseDone:  阻塞打印到 stdout vs 流式无需重复（delta 已发送）
+//   - toolStart:  仅日志 vs 日志 + EventToolStart
+//   - toolDone:   仅日志 vs 日志 + EventToolResult
 package engine
 
 import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/harness9/internal/schema"
@@ -36,14 +35,13 @@ import (
 
 // EventType 枚举了引擎面向客户端的流式事件类型。
 // 与 Provider 层的 StreamChunkType 不同，Event 是经过引擎语义化处理的事件：
-// 引擎知道当前处于 Thinking 阶段还是 Action 阶段，将 text_delta 转化为
-// EventThinkingDelta 或 EventActionDelta；引擎在工具执行前后发送
-// EventToolStart 和 EventToolResult。
+// 引擎根据当前 phase 把 text_delta 映射为 EventThinkingDelta / EventActionDelta；
+// 引擎在工具执行前后发送 EventToolStart 和 EventToolResult。
 type EventType string
 
 const (
 	// EventThinkingDelta 表示 Thinking 阶段的文本增量。
-	// 仅在 EnableThinking == true 时产生。Data 类型为 string（token 文本）。
+	// 仅在 enableThinking == true 时产生。Data 类型为 string（token 文本）。
 	EventThinkingDelta EventType = "thinking_delta"
 
 	// EventActionDelta 表示 Action 阶段的文本增量。
@@ -61,8 +59,7 @@ const (
 	// Data 类型为 schema.ToolResult（含 Output、IsError）。
 	EventToolResult EventType = "tool_result"
 
-	// EventDone 表示 agent loop 正常结束。
-	// 当模型不再请求工具调用（自然终止）时触发。Data 为 nil。
+	// EventDone 表示 agent loop 正常结束（模型不再请求工具调用）。
 	EventDone EventType = "done"
 
 	// EventError 表示 agent loop 中发生了错误。
@@ -71,15 +68,15 @@ const (
 	EventError EventType = "error"
 )
 
-// Event 是引擎面向客户端的流式事件单元。RunStream 方法返回 <-chan Event，
-// 客户端从 channel 中读取事件来实现实时交互。
+// Event 是引擎面向客户端的流式事件单元。RunStream 返回 <-chan Event，
+// 客户端从 channel 中读取事件实现实时交互。
 //
-// 典型的消费方式：
+// 典型消费方式：
 //
 //	for evt := range stream {
 //	    switch evt.Type {
 //	    case engine.EventActionDelta:
-//	        fmt.Print(evt.Data.(string))  // 逐 token 输出
+//	        fmt.Print(evt.Data.(string))
 //	    case engine.EventToolResult:
 //	        result := evt.Data.(schema.ToolResult)
 //	        fmt.Println(result.Output)
@@ -91,25 +88,26 @@ const (
 //	}
 type Event struct {
 	// Type 事件类型，决定 Data 字段的实际类型。
-	// 参见 EventType 常量的文档说明。
 	Type EventType `json:"type"`
 
-	// Turn 当前事件所属的 Turn 编号。Turn 从 1 开始递增。
-	// 客户端可通过此字段判断当前是第几轮循环。
+	// Turn 当前事件所属的 Turn 编号（从 1 开始）。
 	Turn int `json:"turn,omitempty"`
 
 	// Data 事件载荷，类型随 Type 变化：
 	//   - EventThinkingDelta / EventActionDelta → string（token 文本）
-	//   - EventToolStart   → schema.ToolCall（含 Name、ID、Arguments）
-	//   - EventToolResult  → schema.ToolResult（含 Output、IsError）
+	//   - EventToolStart   → schema.ToolCall
+	//   - EventToolResult  → schema.ToolResult
 	//   - EventDone        → nil
-	//   - EventError       → string（错误描述）
+	//   - EventError       → string
 	Data any `json:"data,omitempty"`
 }
 
 // sendEvent 向 Event channel 发送事件，同时感知 context 取消。
-// 使用 select 监听 ctx.Done()，确保在 context 被取消时不会阻塞在 channel 发送上。
+// 用于循环内部的事件发送，避免在 context 已取消时无谓地阻塞在 channel 写入上。
 // 返回 false 表示 context 已取消，调用方应立即退出 goroutine。
+//
+// 注意：终止事件（EventDone / EventError）应使用直接 ch <- 而非本函数，
+// 因为 context 取消时本函数会丢弃事件，但终止事件需要确保消费者收到。
 func sendEvent(ctx context.Context, ch chan<- Event, evt Event) bool {
 	select {
 	case <-ctx.Done():
@@ -122,252 +120,97 @@ func sendEvent(ctx context.Context, ch chan<- Event, evt Event) bool {
 // RunStream 是 Run 的流式对应方法，通过 Go channel 逐事件输出 agent loop 的运行状态。
 //
 // 与 Run 的核心区别：
-//   - Run 调用 provider.Generate（阻塞等待完整响应），RunStream 调用 provider.GenerateStream（逐 token 增量）
-//   - Run 通过 fmt.Printf 直接输出文本，RunStream 通过 Event channel 输出，由消费者决定展示方式
+//   - Run 调用 provider.Generate（阻塞），RunStream 调用 provider.GenerateStream（流式逐 token）
+//   - Run 通过 fmt.Printf 直接输出文本，RunStream 通过 Event channel 输出
 //   - Run 返回 error，RunStream 通过 EventError 事件报告错误
 //
-// 内部启动一个独立的 goroutine 运行主循环，返回只读 channel 供消费者读取。
-// channel 在循环结束（正常或异常）后自动关闭。
-//
-// 参数和配置与 Run 完全一致，两种模式共享同一个 AgentEngine 实例。
+// 内部启动独立 goroutine 运行共享 runLoop，返回只读 channel 供消费者读取。
+// channel 在循环结束（正常 / 异常 / context 取消）后自动关闭。
+// 配置（MaxTurns、ToolTimeout 等）与 Run 完全一致，两种模式共享同一个 AgentEngine 实例。
 func (e *AgentEngine) RunStream(ctx context.Context, userPrompt string) (<-chan Event, error) {
 	ch := make(chan Event)
 
 	go func() {
 		defer close(ch)
 
-		log.Printf("[engine-stream] 启动 | workdir=%s thinking=%v maxTurns=%d toolTimeout=%v maxConcurrent=%d",
-			e.WorkDir, e.EnableThinking, e.MaxTurns, e.ToolTimeout, e.MaxConcurrentTools)
-
-		// 初始化对话上下文，与 Run 保持一致：
-		// 注入 system prompt（含工作区路径）定义 agent 身份，附上用户任务描述。
-		contextHistory := []schema.Message{
-			{
-				Role: schema.RoleSystem,
-				Content: fmt.Sprintf(
-					"You are harness9, an expert coding assistant. "+
-						"You have full access to tools in the workspace. "+
-						"Your working directory is: %s",
-					e.WorkDir,
-				),
+		em := emitter{
+			generate: func(ctx context.Context, ph phase, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
+				return e.streamGenerate(ctx, ch, ph, turn, history, tools)
 			},
-			{
-				Role:    schema.RoleUser,
-				Content: userPrompt,
+			phaseDone: func(_ phase, _ int, _ string) {
+				// 流式模式：文本已通过 EventThinkingDelta / EventActionDelta 逐 token 发送，
+				// 阶段结束时无需重复输出。
+			},
+			toolStart: func(turn int, tc schema.ToolCall) {
+				log.Print(formatToolStartLog("engine-stream", turn, tc))
+				sendEvent(ctx, ch, Event{Type: EventToolStart, Turn: turn, Data: tc})
+			},
+			toolDone: func(turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration) {
+				log.Print(formatToolDoneLog("engine-stream", turn, tc, result, d))
+				sendEvent(ctx, ch, Event{Type: EventToolResult, Turn: turn, Data: result})
 			},
 		}
 
-		turnCount := 0
-
-		for {
-			turnCount++
-
-			// --- 安全阀：防止无限循环 ---
-			if e.MaxTurns > 0 && turnCount > e.MaxTurns {
-				sendEvent(ctx, ch, Event{Type: EventError, Data: fmt.Sprintf("已达最大 Turn 数 (%d)", e.MaxTurns)})
-				return
-			}
-
-			// 检查 context 是否已取消（支持超时和手动中断）
-			select {
-			case <-ctx.Done():
-				ch <- Event{Type: EventError, Data: ctx.Err().Error()}
-				return
-			default:
-			}
-
-			log.Printf("[engine-stream] Turn %d | contextMessages=%d", turnCount, len(contextHistory))
-
-			availableTools := e.registry.GetAvailableTools()
-
-			var responseMsg *schema.Message
-
-			if e.EnableThinking {
-				// Phase 1: Thinking — 使用 EventThinkingDelta 转发 token 增量
-				thinkMsg := e.streamPhase(ctx, ch, turnCount, EventThinkingDelta, contextHistory, nil)
-				if thinkMsg == nil {
-					return
-				}
-				log.Printf("[engine-stream] Turn %d | Phase 1 完成 | 思考长度=%d chars", turnCount, len(thinkMsg.Content))
-
-				// 构建临时上下文，将 Phase 1 思考注入 Phase 2 调用。
-				// 与 Run 的逻辑一致：思考仅在 Phase 2 调用期间存在，不持久化到主 contextHistory。
-				phase2History := make([]schema.Message, len(contextHistory), len(contextHistory)+1)
-				copy(phase2History, contextHistory)
-				phase2History = append(phase2History, *thinkMsg)
-
-				// Phase 2: Action — 使用 EventActionDelta 转发 token 增量
-				responseMsg = e.streamPhase(ctx, ch, turnCount, EventActionDelta, phase2History, availableTools)
-				if responseMsg == nil {
-					return
-				}
-
-				// 合并 Thinking + Action 为单条 assistant 消息（避免连续 assistant 消息）
-				merged := &schema.Message{
-					Role:      schema.RoleAssistant,
-					Content:   joinContent(thinkMsg.Content, responseMsg.Content),
-					ToolCalls: responseMsg.ToolCalls,
-				}
-				responseMsg = merged
-
-				log.Printf("[engine-stream] Turn %d | Two-Stage 合并完成 | thinking=%d chars action=%d chars toolCalls=%d",
-					turnCount, len(thinkMsg.Content), len(responseMsg.Content), len(responseMsg.ToolCalls))
-			} else {
-				// 标准 ReAct 模式：单阶段，直接使用 EventActionDelta
-				log.Printf("[engine-stream] Turn %d | Action (tools=%d)", turnCount, len(availableTools))
-				responseMsg = e.streamPhase(ctx, ch, turnCount, EventActionDelta, contextHistory, availableTools)
-				if responseMsg == nil {
-					return
-				}
-			}
-
-			contextHistory = append(contextHistory, *responseMsg)
-
-			// --- 终止条件检测：模型不再请求工具调用 ---
-			if len(responseMsg.ToolCalls) == 0 {
-				log.Printf("[engine-stream] Turn %d | 任务完成，模型未请求工具调用", turnCount)
-				sendEvent(ctx, ch, Event{Type: EventDone})
-				return
-			}
-
-			// --- ToolCall 阶段（并发执行，带独立超时，同时发送事件） ---
-			results := e.executeToolsStreaming(ctx, ch, turnCount, responseMsg.ToolCalls)
-
-			// --- Observation 阶段：将工具结果追加到上下文 ---
-			for i, toolCall := range responseMsg.ToolCalls {
-				observationMsg := schema.Message{
-					Role:       schema.RoleUser,
-					Content:    results[i].Output,
-					ToolCallID: toolCall.ID,
-				}
-				contextHistory = append(contextHistory, observationMsg)
-			}
-
-			log.Printf("[engine-stream] Turn %d | Observation 注入完成 | contextMessages=%d",
-				turnCount, len(contextHistory))
+		// 运行共享主循环，把返回值翻译成终止事件。
+		// 注意：终止事件使用直接 ch <- 而非 sendEvent，以保证 context 已取消时
+		// 消费者仍能收到错误信息（消费者 goroutine 不受 ctx 影响，仍在 range 读取）。
+		if err := e.runLoop(ctx, userPrompt, "engine-stream", em); err != nil {
+			ch <- Event{Type: EventError, Data: err.Error()}
+			return
 		}
+		ch <- Event{Type: EventDone}
 	}()
 
 	return ch, nil
 }
 
-// streamPhase 是 RunStream 中替代直接调用 provider.Generate 的核心方法。
-// 它调用 provider.GenerateStream 获取流式 channel，将底层 StreamChunk 逐个读取
-// 并转换为面向客户端的语义 Event。
+// streamGenerate 是 RunStream 用于驱动 Provider.GenerateStream 的桥接器。
+// 它将底层 StreamChunk 逐个读取并转换为面向客户端的语义 Event，最终返回
+// 累积完成的完整 Message 供 runLoop 注入到对话上下文。
 //
 // 工作流程：
 //  1. 调用 provider.GenerateStream 获取 <-chan StreamChunk
-//  2. 从 channel 逐个读取 chunk：
-//     - text_delta → 转发为 deltaType（EventThinkingDelta 或 EventActionDelta）事件
-//     - tool_call_start → 忽略（工具执行事件在 executeToolsStreaming 中发送）
-//     - done → 提取完整的 Message（含累积的 Content 和 ToolCalls）
-//     - error → 发送 EventError 事件并返回 nil
-//  3. 返回累积的完整 Message，供 RunStream 注入到对话上下文
+//  2. 根据 phase 决定文本 delta 应发送的事件类型（thinking_delta / action_delta）
+//  3. 逐 chunk 读取：
+//     - text_delta → 转发为相应的 EventXxxDelta
+//     - tool_call_start / tool_call_delta → 忽略（工具事件在 executeTools 中发送）
+//     - done → 提取完整 Message
+//     - error → 返回 error，由 runLoop 翻译成 EventError
 //
-// deltaType 参数决定文本增量事件的类型：
-//   - Thinking 阶段传入 EventThinkingDelta
-//   - Action 阶段传入 EventActionDelta
-//
-// 返回 nil 表示应终止 RunStream（错误或 context 取消）。
-func (e *AgentEngine) streamPhase(ctx context.Context, ch chan<- Event, turn int, deltaType EventType, history []schema.Message, tools []schema.ToolDefinition) *schema.Message {
+// 返回 error 时，runLoop 会包装该 error 并最终通过 EventError 报告给消费者。
+func (e *AgentEngine) streamGenerate(ctx context.Context, ch chan<- Event, ph phase, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
 	stream, err := e.provider.GenerateStream(ctx, history, tools)
 	if err != nil {
-		log.Printf("[engine-stream] Turn %d | GenerateStream 失败: %v", turn, err)
-		sendEvent(ctx, ch, Event{Type: EventError, Turn: turn, Data: err.Error()})
-		return nil
+		return nil, err
 	}
 
-	// 从 Provider 的 StreamChunk channel 中读取并转发。
-	// Provider 在流结束时自动关闭 channel 并在最后一个 StreamChunkDone 中携带完整 Message。
+	// 根据 phase 选择文本增量事件的具体类型，让消费者能区分"思考流"和"行动流"。
+	deltaType := EventActionDelta
+	if ph == phaseThinking {
+		deltaType = EventThinkingDelta
+	}
+
 	var msg *schema.Message
 	for chunk := range stream {
 		switch chunk.Type {
 		case schema.StreamChunkTextDelta:
 			if !sendEvent(ctx, ch, Event{Type: deltaType, Turn: turn, Data: chunk.Delta}) {
-				return nil
+				// context 已取消，返回错误让 runLoop 走错误路径退出
+				return nil, ctx.Err()
 			}
-		case schema.StreamChunkToolCallStart:
-			// 工具调用请求已到达，但实际执行在 executeToolsStreaming 中进行。
-			// EventToolStart 在那里发送，保证语义正确。
+		case schema.StreamChunkToolCallStart, schema.StreamChunkToolCallDelta:
+			// 工具调用请求已到达 Provider 流，但实际执行在 executeTools 中进行。
+			// EventToolStart / EventToolResult 在那里统一发送，避免重复语义。
 		case schema.StreamChunkDone:
 			msg = chunk.Message
 		case schema.StreamChunkError:
-			log.Printf("[engine-stream] Turn %d | Provider 流式错误: %s", turn, chunk.Error)
-			sendEvent(ctx, ch, Event{Type: EventError, Turn: turn, Data: chunk.Error})
-			return nil
+			return nil, fmt.Errorf("%s", chunk.Error)
 		}
 	}
 
 	// 防御性检查：Provider 必须在流结束前发送 StreamChunkDone。
 	if msg == nil {
-		sendEvent(ctx, ch, Event{Type: EventError, Turn: turn, Data: "provider stream ended without done chunk"})
-		return nil
+		return nil, fmt.Errorf("provider stream ended without done chunk")
 	}
-
-	return msg
-}
-
-// executeToolsStreaming 并发执行所有工具调用，与阻塞模式的 executeToolsConcurrently 逻辑一致，
-// 但在工具启动和完成时通过 Event channel 发送事件，使客户端能够实时感知工具执行进度。
-//
-// 事件发送时序：
-//
-//	EventToolStart(name=read_file, id=call_1)   ← 工具 1 开始
-//	EventToolStart(name=bash, id=call_2)        ← 工具 2 开始
-//	EventToolResult(output=..., id=call_1)       ← 工具 1 完成
-//	EventToolResult(output=..., id=call_2)       ← 工具 2 完成
-//
-// 由于工具并发执行，EventToolResult 的顺序不固定（先完成的先发送）。
-func (e *AgentEngine) executeToolsStreaming(ctx context.Context, ch chan<- Event, turn int, toolCalls []schema.ToolCall) []schema.ToolResult {
-	log.Printf("[engine-stream] Turn %d | 并行执行 %d 个工具调用 (maxConcurrent=%d)", turn, len(toolCalls), e.MaxConcurrentTools)
-
-	results := make([]schema.ToolResult, len(toolCalls))
-	var wg sync.WaitGroup
-
-	// 信号量（Semaphore）：限制并发工具数，防止下游过载。
-	// 与阻塞模式 executeToolsConcurrently 保持一致。
-	var sem chan struct{}
-	if e.MaxConcurrentTools > 0 {
-		sem = make(chan struct{}, e.MaxConcurrentTools)
-	}
-
-	for i, toolCall := range toolCalls {
-		wg.Add(1)
-		go func(idx int, tc schema.ToolCall) {
-			defer wg.Done()
-
-			if sem != nil {
-				sem <- struct{}{}
-				defer func() { <-sem }()
-			}
-
-			// 为每个工具创建带独立超时的子 context。
-			// 超时不影响其他工具执行，仅将当前工具标记为失败。
-			toolCtx := ctx
-			var cancel context.CancelFunc
-			if e.ToolTimeout > 0 {
-				toolCtx, cancel = context.WithTimeout(ctx, e.ToolTimeout)
-				defer cancel()
-			}
-
-			log.Printf("[engine-stream] Turn %d | 工具启动 | name=%s id=%s", turn, tc.Name, tc.ID)
-
-			sendEvent(ctx, ch, Event{Type: EventToolStart, Turn: turn, Data: tc})
-
-			toolStart := time.Now()
-			results[idx] = e.registry.Execute(toolCtx, tc)
-			toolDuration := time.Since(toolStart)
-
-			if results[idx].IsError {
-				log.Printf("[engine-stream] Turn %d | 工具失败 | name=%s id=%s duration=%s", turn, tc.Name, tc.ID, toolDuration)
-			} else {
-				log.Printf("[engine-stream] Turn %d | 工具完成 | name=%s id=%s duration=%s", turn, tc.Name, tc.ID, toolDuration)
-			}
-
-			sendEvent(ctx, ch, Event{Type: EventToolResult, Turn: turn, Data: results[idx]})
-		}(i, toolCall)
-	}
-
-	wg.Wait()
-	return results
+	return msg, nil
 }

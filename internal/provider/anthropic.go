@@ -136,7 +136,7 @@ func (p *AnthropicProvider) GenerateStream(ctx context.Context, msgs []schema.Me
 		defer close(ch)
 
 		var contentBuf strings.Builder
-		toolAccs := make(map[int]*anthropicToolCallAccumulator)
+		toolAccs := newToolCallAccumulators()
 
 		for stream.Next() {
 			event := stream.Current()
@@ -146,11 +146,7 @@ func (p *AnthropicProvider) GenerateStream(ctx context.Context, msgs []schema.Me
 				cb := event.AsContentBlockStart()
 				if cb.ContentBlock.Type == "tool_use" {
 					idx := int(cb.Index)
-					toolAccs[idx] = &anthropicToolCallAccumulator{
-						index: idx,
-						id:    cb.ContentBlock.ID,
-						name:  cb.ContentBlock.Name,
-					}
+					toolAccs.start(idx, cb.ContentBlock.ID, cb.ContentBlock.Name)
 					if !sendStreamChunk(ctx, ch, schema.StreamChunk{
 						Type: schema.StreamChunkToolCallStart,
 						ToolCall: &schema.ToolCallDelta{
@@ -178,9 +174,7 @@ func (p *AnthropicProvider) GenerateStream(ctx context.Context, msgs []schema.Me
 				case "input_json_delta":
 					ijd := delta.Delta.AsInputJSONDelta()
 					idx := int(delta.Index)
-					if acc, ok := toolAccs[idx]; ok {
-						acc.args.WriteString(ijd.PartialJSON)
-					}
+					toolAccs.appendArgs(idx, ijd.PartialJSON)
 					if !sendStreamChunk(ctx, ch, schema.StreamChunk{
 						Type: schema.StreamChunkToolCallDelta,
 						ToolCall: &schema.ToolCallDelta{
@@ -203,17 +197,9 @@ func (p *AnthropicProvider) GenerateStream(ctx context.Context, msgs []schema.Me
 		}
 
 		msg := &schema.Message{
-			Role:    schema.RoleAssistant,
-			Content: contentBuf.String(),
-		}
-		for i := 0; i < len(toolAccs); i++ {
-			if acc, ok := toolAccs[i]; ok {
-				msg.ToolCalls = append(msg.ToolCalls, schema.ToolCall{
-					ID:        acc.id,
-					Name:      acc.name,
-					Arguments: []byte(acc.args.String()),
-				})
-			}
+			Role:      schema.RoleAssistant,
+			Content:   contentBuf.String(),
+			ToolCalls: toolAccs.finalize(),
 		}
 
 		sendStreamChunk(ctx, ch, schema.StreamChunk{
@@ -223,19 +209,6 @@ func (p *AnthropicProvider) GenerateStream(ctx context.Context, msgs []schema.Me
 	}()
 
 	return ch, nil
-}
-
-// anthropicToolCallAccumulator 累积 Anthropic 流式响应中单个工具调用的完整信息。
-// Anthropic SDK 在流式模式下，工具调用的传输分为：
-//   - content_block_start: 包含 Index、ID、Name（在 StreamChunkToolCallStart 中发送）
-//   - input_json_delta: 包含 PartialJSON 片段（在 StreamChunkToolCallDelta 中发送）
-//
-// 使用 Index 作为 key 存储在 map 中，支持多个并行工具调用的独立累积。
-type anthropicToolCallAccumulator struct {
-	index int
-	id    string
-	name  string
-	args  strings.Builder
 }
 
 // convertMessages 将内部 schema.Message 转换为 Anthropic SDK 的消息参数格式。

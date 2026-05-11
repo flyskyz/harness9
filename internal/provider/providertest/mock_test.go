@@ -1,4 +1,4 @@
-package provider
+package providertest
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestMockProvider_ThinkingPhase_ReturnsContent(t *testing.T) {
-	p := NewMockProvider()
+	p := NewMock()
 	msg, err := p.Generate(context.Background(), nil, nil) // tools=nil → thinking
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -25,7 +25,7 @@ func TestMockProvider_ThinkingPhase_ReturnsContent(t *testing.T) {
 }
 
 func TestMockProvider_Turn1_RequestsToolCall(t *testing.T) {
-	p := NewMockProvider()
+	p := NewMock()
 	tools := []schema.ToolDefinition{{Name: "bash"}}
 
 	msg, err := p.Generate(context.Background(), nil, tools)
@@ -41,7 +41,7 @@ func TestMockProvider_Turn1_RequestsToolCall(t *testing.T) {
 }
 
 func TestMockProvider_Turn2_ReturnsFinalReply(t *testing.T) {
-	p := NewMockProvider()
+	p := NewMock()
 	tools := []schema.ToolDefinition{{Name: "bash"}}
 
 	if _, err := p.Generate(context.Background(), nil, tools); err != nil { // turn 1
@@ -60,7 +60,7 @@ func TestMockProvider_Turn2_ReturnsFinalReply(t *testing.T) {
 }
 
 func TestMockProvider_ThinkingPhase_DoesNotIncrementTurnCounter(t *testing.T) {
-	p := NewMockProvider()
+	p := NewMock()
 	tools := []schema.ToolDefinition{{Name: "bash"}}
 
 	// Multiple thinking calls (tools=nil) must not advance the action turn counter.
@@ -81,7 +81,7 @@ func TestMockProvider_ThinkingPhase_DoesNotIncrementTurnCounter(t *testing.T) {
 }
 
 func TestMockProvider_GenerateStream_EndsWithDoneChunk(t *testing.T) {
-	p := NewMockProvider()
+	p := NewMock()
 	tools := []schema.ToolDefinition{{Name: "bash"}}
 
 	stream, err := p.GenerateStream(context.Background(), nil, tools)
@@ -103,7 +103,7 @@ func TestMockProvider_GenerateStream_EndsWithDoneChunk(t *testing.T) {
 }
 
 func TestMockProvider_GenerateStream_ThinkingPhaseHasTextDelta(t *testing.T) {
-	p := NewMockProvider()
+	p := NewMock()
 
 	stream, err := p.GenerateStream(context.Background(), nil, nil) // thinking
 	if err != nil {
@@ -122,7 +122,7 @@ func TestMockProvider_GenerateStream_ThinkingPhaseHasTextDelta(t *testing.T) {
 }
 
 func TestMockProvider_GenerateStream_Turn1HasToolCallChunks(t *testing.T) {
-	p := NewMockProvider()
+	p := NewMock()
 	tools := []schema.ToolDefinition{{Name: "bash"}}
 
 	stream, err := p.GenerateStream(context.Background(), nil, tools)
