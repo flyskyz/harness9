@@ -30,6 +30,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/harness9/internal/logfmt"
 	"github.com/harness9/internal/schema"
 )
 
@@ -142,11 +143,11 @@ func (e *AgentEngine) RunStream(ctx context.Context, userPrompt string) (<-chan 
 				// 阶段结束时无需重复输出。
 			},
 			toolStart: func(turn int, tc schema.ToolCall) {
-				log.Print(formatToolStartLog("engine-stream", turn, tc))
+				log.Print(logfmt.FormatToolStart("engine-stream", turn, tc))
 				sendEvent(ctx, ch, Event{Type: EventToolStart, Turn: turn, Data: tc})
 			},
 			toolDone: func(turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration) {
-				log.Print(formatToolDoneLog("engine-stream", turn, tc, result, d))
+				log.Print(logfmt.FormatToolDone("engine-stream", turn, tc, result, d))
 				sendEvent(ctx, ch, Event{Type: EventToolResult, Turn: turn, Data: result})
 			},
 		}

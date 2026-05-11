@@ -156,9 +156,12 @@ harness9/
 │   │   ├── read_file.go             # read_file 工具（沙箱保护，4096 字节截断）
 │   │   ├── write_file.go            # write_file 工具（沙箱保护，Auto-Mkdir）
 │   │   └── edit_file.go             # edit_file 工具（多级模糊匹配文件编辑，沙箱保护）
-│   └── env/                         # 环境配置
-│       ├── env.go                   # 零依赖 .env 文件加载器（系统变量优先）
-│       └── env_test.go              # 配置加载单元测试
+│   ├── env/                         # 环境配置
+│   │   ├── env.go                   # 零依赖 .env 文件加载器（系统变量优先）
+│   │   └── env_test.go              # 配置加载单元测试
+│   └── logfmt/                      # 跨模块共享的块状日志格式化工具
+│       ├── format.go                # FormatToolStart/Done + FormatJSON + FormatOutput
+│       └── format_test.go           # 格式化函数单元测试
 ├── docs/
 │   └── 核心功能/
 │       ├── agent-loop.md            # Agent Loop 核心实现原理（Two-Stage ReAct 详解）
@@ -209,6 +212,7 @@ harness9/
 | **schema** | 跨组件共享的核心数据类型（Message、ToolCall 等） | ✅ |
 | **tools** | 工具注册表 + 内置工具（bash / read_file / write_file）+ 路径沙箱 | ✅ |
 | **env** | 零依赖 `.env` 配置加载器（系统变量优先） | ✅ |
+| **logfmt** | 跨模块共享的块状日志渲染（FormatToolStart/Done、FormatJSON、FormatOutput） | ✅ |
 | **provider/providertest** | 测试基础设施（mock provider），不进入生产二进制 | ✅ |
 
 > **Roadmap（暂未启动）**：会话记忆持久化（memory）、飞书机器人 Webhook（feishu）。
