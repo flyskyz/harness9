@@ -56,22 +56,15 @@ type IMChannel interface {
 // 每个 Session 独立管理该次交互中占位消息、进度更新和最终回复的 IM 操作。
 type Session interface {
 	// NotifyThinking 发送"思考中"占位消息（Agent 开始处理时调用）。
-	// 实现通常发送一条初始占位消息，并记录其 ID 供后续更新使用。
 	NotifyThinking(ctx context.Context) error
 
-	// UpdateThinkingContent 将 Phase 1（Thinking）的完整推理文本推送到进度消息中。
-	// 在 Thinking 阶段结束、进入工具调用或 EventDone 前调用，让用户看到模型的思考过程。
-	UpdateThinkingContent(ctx context.Context, text string) error
-
-	// NotifyToolStart 推送工具开始执行的进度。
-	// 在引擎分发 EventToolStart 事件时调用。
+	// NotifyToolStart 推送工具开始执行的进度，在 EventToolStart 事件时调用。
 	NotifyToolStart(ctx context.Context, tc schema.ToolCall) error
 
-	// NotifyToolDone 推送工具执行完成的进度。
-	// 在引擎分发 EventToolResult 事件时调用，d 为该工具的实际执行耗时。
+	// NotifyToolDone 推送工具执行完成的进度，d 为该工具的实际执行耗时。
 	NotifyToolDone(ctx context.Context, tc schema.ToolCall, result schema.ToolResult, d time.Duration) error
 
 	// SendReply 发送 Agent 的最终回复（成功或错误均通过此方法）。
-	// 调用方保证 text 非空；若 agent 静默完成，编排层（Server）负责提供兜底文本。
+	// 调用方保证 text 非空；若 agent 静默完成，编排层负责提供兜底文本（"✅ 任务完成"）。
 	SendReply(ctx context.Context, text string) error
 }

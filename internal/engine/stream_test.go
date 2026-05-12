@@ -28,7 +28,7 @@ func TestRunStream_NormalCompletion_ReceivesEventDone(t *testing.T) {
 		},
 	}
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
+	eng := NewAgentEngine(p, r, "/test")
 
 	stream, err := eng.RunStream(context.Background(), "hello")
 	if err != nil {
@@ -45,27 +45,21 @@ func TestRunStream_NormalCompletion_ReceivesEventDone(t *testing.T) {
 	}
 }
 
-func TestRunStream_TwoStageReact_EmitsAllEventTypes(t *testing.T) {
+// TestRunStream_EmitsAllEventTypes 验证携带工具调用的完整流程中各事件类型均被发出。
+func TestRunStream_EmitsAllEventTypes(t *testing.T) {
 	p := &countingProvider{
 		responses: []func(tools []schema.ToolDefinition) *schema.Message{
-			// Turn 1 Phase 1: Thinking
-			func(_ []schema.ToolDefinition) *schema.Message {
-				return &schema.Message{Role: schema.RoleAssistant, Content: "thinking"}
-			},
-			// Turn 1 Phase 2: Action with tool call
+			// Turn 1: Action with tool call
 			func(_ []schema.ToolDefinition) *schema.Message {
 				return &schema.Message{
-					Role: schema.RoleAssistant,
+					Role:    schema.RoleAssistant,
+					Content: "calling tool",
 					ToolCalls: []schema.ToolCall{
 						{ID: "c1", Name: "bash", Arguments: []byte(`{"command":"ls"}`)},
 					},
 				}
 			},
-			// Turn 2 Phase 1: Thinking
-			func(_ []schema.ToolDefinition) *schema.Message {
-				return &schema.Message{Role: schema.RoleAssistant, Content: "thought"}
-			},
-			// Turn 2 Phase 2: Final reply
+			// Turn 2: Final reply
 			func(_ []schema.ToolDefinition) *schema.Message {
 				return &schema.Message{Role: schema.RoleAssistant, Content: "all done"}
 			},
@@ -88,11 +82,10 @@ func TestRunStream_TwoStageReact_EmitsAllEventTypes(t *testing.T) {
 	}
 
 	checks := map[EventType]string{
-		EventThinkingDelta: "at least one EventThinkingDelta",
-		EventActionDelta:   "at least one EventActionDelta",
-		EventToolStart:     "at least one EventToolStart",
-		EventToolResult:    "at least one EventToolResult",
-		EventDone:          "EventDone at end",
+		EventActionDelta: "at least one EventActionDelta",
+		EventToolStart:   "at least one EventToolStart",
+		EventToolResult:  "at least one EventToolResult",
+		EventDone:        "EventDone at end",
 	}
 	for evtType, desc := range checks {
 		if counts[evtType] == 0 {
@@ -120,9 +113,9 @@ func TestRunStream_ContextCancellation_ReceivesEventError(t *testing.T) {
 	r := &staticRegistry{output: "ok"}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // pre-cancel
+	cancel()
 
-	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
+	eng := NewAgentEngine(p, r, "/test")
 	stream, err := eng.RunStream(ctx, "task")
 	if err != nil {
 		t.Fatalf("RunStream error: %v", err)
@@ -143,25 +136,15 @@ func TestRunStream_MaxTurns_ReceivesEventError(t *testing.T) {
 	p := &countingProvider{
 		responses: []func(tools []schema.ToolDefinition) *schema.Message{
 			func(_ []schema.ToolDefinition) *schema.Message {
-				return &schema.Message{
-					Role: schema.RoleAssistant,
-					ToolCalls: []schema.ToolCall{
-						{ID: "c1", Name: "bash", Arguments: []byte("{}")},
-					},
-				}
+				return &schema.Message{Role: schema.RoleAssistant, ToolCalls: []schema.ToolCall{{ID: "c1", Name: "bash", Arguments: []byte("{}")}}}
 			},
 			func(_ []schema.ToolDefinition) *schema.Message {
-				return &schema.Message{
-					Role: schema.RoleAssistant,
-					ToolCalls: []schema.ToolCall{
-						{ID: "c2", Name: "bash", Arguments: []byte("{}")},
-					},
-				}
+				return &schema.Message{Role: schema.RoleAssistant, ToolCalls: []schema.ToolCall{{ID: "c2", Name: "bash", Arguments: []byte("{}")}}}
 			},
 		},
 	}
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", WithThinking(false), WithMaxTurns(1))
+	eng := NewAgentEngine(p, r, "/test", WithMaxTurns(1))
 
 	stream, err := eng.RunStream(context.Background(), "loop")
 	if err != nil {
@@ -189,10 +172,8 @@ func TestRunStream_ToolStartBeforeToolResult(t *testing.T) {
 		responses: []func(tools []schema.ToolDefinition) *schema.Message{
 			func(_ []schema.ToolDefinition) *schema.Message {
 				return &schema.Message{
-					Role: schema.RoleAssistant,
-					ToolCalls: []schema.ToolCall{
-						{ID: "c1", Name: "bash", Arguments: []byte(`{}`)},
-					},
+					Role:      schema.RoleAssistant,
+					ToolCalls: []schema.ToolCall{{ID: "c1", Name: "bash", Arguments: []byte(`{}`)}},
 				}
 			},
 			func(_ []schema.ToolDefinition) *schema.Message {
@@ -200,11 +181,8 @@ func TestRunStream_ToolStartBeforeToolResult(t *testing.T) {
 			},
 		},
 	}
-	r := &staticRegistry{
-		tools:  []schema.ToolDefinition{{Name: "bash"}},
-		output: "hi",
-	}
-	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
+	r := &staticRegistry{tools: []schema.ToolDefinition{{Name: "bash"}}, output: "hi"}
+	eng := NewAgentEngine(p, r, "/test")
 
 	stream, err := eng.RunStream(context.Background(), "test")
 	if err != nil {
@@ -225,7 +203,6 @@ func TestRunStream_ToolStartBeforeToolResult(t *testing.T) {
 			resultIdx = i
 		}
 	}
-
 	if startIdx == -1 {
 		t.Fatal("expected EventToolStart in stream")
 	}
@@ -246,7 +223,7 @@ func TestRunStream_EventTurnNumbering(t *testing.T) {
 		},
 	}
 	r := &staticRegistry{output: "ok"}
-	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
+	eng := NewAgentEngine(p, r, "/test")
 
 	stream, err := eng.RunStream(context.Background(), "test")
 	if err != nil {
@@ -265,10 +242,8 @@ func TestRunStream_ToolResultDataIsToolResult(t *testing.T) {
 		responses: []func(tools []schema.ToolDefinition) *schema.Message{
 			func(_ []schema.ToolDefinition) *schema.Message {
 				return &schema.Message{
-					Role: schema.RoleAssistant,
-					ToolCalls: []schema.ToolCall{
-						{ID: "c1", Name: "bash", Arguments: []byte(`{}`)},
-					},
+					Role:      schema.RoleAssistant,
+					ToolCalls: []schema.ToolCall{{ID: "c1", Name: "bash", Arguments: []byte(`{}`)}},
 				}
 			},
 			func(_ []schema.ToolDefinition) *schema.Message {
@@ -276,11 +251,8 @@ func TestRunStream_ToolResultDataIsToolResult(t *testing.T) {
 			},
 		},
 	}
-	r := &staticRegistry{
-		tools:  []schema.ToolDefinition{{Name: "bash"}},
-		output: "tool output here",
-	}
-	eng := NewAgentEngine(p, r, "/test", WithThinking(false))
+	r := &staticRegistry{tools: []schema.ToolDefinition{{Name: "bash"}}, output: "tool output here"}
+	eng := NewAgentEngine(p, r, "/test")
 
 	stream, err := eng.RunStream(context.Background(), "test")
 	if err != nil {

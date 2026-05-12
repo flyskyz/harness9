@@ -9,6 +9,7 @@ package feishu
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -18,6 +19,7 @@ import (
 	"github.com/larksuite/oapi-sdk-go/v3/ws"
 
 	"github.com/harness9/internal/imchannel"
+	"github.com/harness9/internal/logfmt"
 )
 
 // Channel 是 IMChannel 接口的飞书实现，通过 WebSocket 长连接接收事件并调用飞书 API 发送消息。
@@ -54,10 +56,17 @@ func (c *Channel) NewSession(chatID, _ string) imchannel.Session {
 
 // Start 建立飞书 WebSocket 长连接并开始接收事件，阻塞直到 ctx 取消。
 // 支持自动重连，连接中断后会自动恢复。
+//
+// 注意：飞书 SDK ws.Client.Start 内部以 select{} 永久阻塞，不响应 ctx 取消。
+// 这里将其放入 goroutine，由外层 select 监听 ctx.Done()，确保 Ctrl-C 可正常退出。
+// 该 goroutine 在 ctx 取消后无法主动回收（SDK 限制），随进程退出由 OS 统一清理。
 func (c *Channel) Start(ctx context.Context) error {
 	d := dispatcher.NewEventDispatcher("", "").
 		OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
 			return c.handleEvent(ctx, event)
+		}).
+		OnP2MessageReadV1(func(_ context.Context, _ *larkim.P2MessageReadV1) error {
+			return nil // 消息已读回执，无需处理
 		})
 
 	wsClient := ws.NewClient(
@@ -67,7 +76,16 @@ func (c *Channel) Start(ctx context.Context) error {
 		ws.WithLogLevel(larkcore.LogLevelInfo),
 		ws.WithAutoReconnect(true),
 	)
-	return wsClient.Start(ctx)
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- wsClient.Start(ctx) }()
+
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-errCh:
+		return err
+	}
 }
 
 // handleEvent 处理飞书消息接收事件，过滤非私聊和非文本消息。
@@ -86,7 +104,7 @@ func (c *Channel) handleEvent(ctx context.Context, event *larkim.P2MessageReceiv
 	}
 	// 仅处理文本消息
 	if msg.MessageType == nil || *msg.MessageType != "text" {
-		log.Printf("[feishu] 忽略非文本消息: type=%v", msg.MessageType)
+		log.Print(logfmt.FormatMsg("feishu", fmt.Sprintf("忽略非文本消息: type=%v", msg.MessageType)))
 		return nil
 	}
 	if msg.Content == nil {
@@ -109,7 +127,7 @@ func (c *Channel) handleEvent(ctx context.Context, event *larkim.P2MessageReceiv
 		senderID = derefStr(event.Event.Sender.SenderId.OpenId)
 	}
 
-	log.Printf("[feishu] 收到私聊消息 | chatID=%s senderID=%s msgID=%s", chatID, senderID, messageID)
+	log.Print(logfmt.FormatMsg("feishu", fmt.Sprintf("收到私聊消息 │ chatID=%s senderID=%s msgID=%s", chatID, senderID, messageID)))
 
 	c.handler(ctx, imchannel.IncomingMessage{
 		ChatID:    chatID,

@@ -119,7 +119,7 @@ MessageHandler(ctx, IncomingMessage)
 
 **并发安全**：`Session` 本身无可变状态，`sendText` 每次均为独立 HTTP 请求，多 goroutine 同时调用不同方法（如并发工具执行期间的 `NotifyToolStart`）是安全的。消息到达用户侧的顺序由飞书服务端决定，不保证与发送顺序严格一致。
 
-## 4. Server 编排层（`cmd/harness9/server.go`）
+## 4. Server 编排层（`cmd/harness9/bot.go`）
 
 Server 是 IMChannel 与 AgentEngine 之间的桥接层。
 

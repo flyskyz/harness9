@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -26,6 +27,7 @@ import (
 	"github.com/harness9/internal/engine"
 	"github.com/harness9/internal/env"
 	"github.com/harness9/internal/imchannel/feishu"
+	"github.com/harness9/internal/logfmt"
 	"github.com/harness9/internal/provider"
 	"github.com/harness9/internal/tools"
 )
@@ -34,12 +36,12 @@ func main() {
 	// 先取进程工作目录，用于定位 .env 文件
 	cwd, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("[main] 获取工作目录失败: %v", err)
+		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("获取工作目录失败: %v", err)))
 	}
 
 	// 加载 .env（不存在时静默跳过，由系统环境变量提供配置）
 	if err := env.Load(filepath.Join(cwd, ".env")); err != nil {
-		log.Fatalf("[main] 加载环境配置失败: %v", err)
+		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("加载环境配置失败: %v", err)))
 	}
 
 	// WORK_DIR 优先用 .env / 系统变量，未配置则回退到进程工作目录
@@ -51,7 +53,7 @@ func main() {
 	appID := os.Getenv("FEISHU_APP_ID")
 	appSecret := os.Getenv("FEISHU_APP_SECRET")
 	if appID == "" || appSecret == "" {
-		log.Fatal("[main] 缺少飞书配置：FEISHU_APP_ID 或 FEISHU_APP_SECRET 未设置")
+		log.Fatal(logfmt.FormatMsg("main", "缺少飞书配置：FEISHU_APP_ID 或 FEISHU_APP_SECRET 未设置"))
 	}
 
 	// 指定 LLM Provider，模型名称通过 LLM_MODEL 环境变量配置，未设置时使用默认值。
@@ -61,7 +63,7 @@ func main() {
 	}
 	llm, err := provider.NewOpenAIProvider(modelName)
 	if err != nil {
-		log.Fatalf("[main] 创建 Provider 失败: %v", err)
+		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("创建 Provider 失败: %v", err)))
 	}
 
 	// 创建 ToolRegistry 并注册内置工具
@@ -73,7 +75,7 @@ func main() {
 		tools.NewEditFileTool(workDir),
 	} {
 		if err := registry.Register(tool); err != nil {
-			log.Fatalf("[main] 注册工具 %s 失败: %v", tool.Name(), err)
+			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("注册工具 %s 失败: %v", tool.Name(), err)))
 		}
 	}
 
@@ -88,9 +90,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	log.Printf("[main] harness9 飞书 Bot 启动 | workDir=%s appID=%s", workDir, appID)
+	log.Print(logfmt.FormatMsg("main", fmt.Sprintf("harness9 飞书 Bot 启动 │ workDir=%s appID=%s", workDir, appID)))
 	if err := srv.Start(ctx); err != nil {
-		log.Fatalf("[main] Server 退出: %v", err)
+		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("Server 退出: %v", err)))
 	}
-	log.Println("[main] harness9 正常退出")
+	log.Print(logfmt.FormatMsg("main", "harness9 正常退出"))
 }

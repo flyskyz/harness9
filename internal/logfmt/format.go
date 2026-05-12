@@ -1,7 +1,7 @@
 // Package logfmt 提供 harness9 项目内共享的"块状日志"（Block-Style Log）渲染工具。
 //
-// 设计目标：让分散在不同模块（engine、memory、feishu 等）的多行日志保持统一的
-// 视觉风格 —— 首行单行头部便于 grep，续行以固定缩进对齐形成"信息块"。
+// 设计目标：让分散在不同模块（engine、imchannel 等）的日志保持统一的视觉风格 ——
+// 首行单行头部便于 grep，续行以固定缩进对齐形成"信息块"。
 //
 // # 视觉风格示例
 //
@@ -12,7 +12,12 @@
 //
 // # 公共 API 总览
 //
-//   - FormatToolStart / FormatToolDone — 工具调用日志（依赖 schema.ToolCall/ToolResult）
+//   - FormatMsg                        — 通用单行日志条目
+//   - FormatLoopStart / FormatLoopEnd  — agent loop 启动 / 结束
+//   - FormatTurnStart / FormatTurnDone — agent loop 每个 Turn 的头部 / 完成
+//   - FormatObservation                — Observation 注入完成
+//   - FormatParallelTools              — 并行工具执行开始
+//   - FormatToolStart / FormatToolDone — 单个工具调用启动 / 完成（含多行 output 块）
 //   - FormatJSON                       — 把 json.RawMessage 渲染为内联/pretty-print 形式
 //   - FormatOutput                     — 把任意字符串渲染为 "│ " 前缀的多行块
 //   - MaxOutputLen / Indent            — 输出长度上限与续行缩进常量
@@ -184,6 +189,45 @@ func FormatOutput(s string) (body string, total int, truncated bool) {
 		b.WriteString(line)
 	}
 	return b.String(), total, truncated
+}
+
+// FormatMsg 渲染通用单行日志条目：[prefix] msg。
+func FormatMsg(prefix, msg string) string {
+	return fmt.Sprintf("[%s] %s", prefix, msg)
+}
+
+// FormatLoopStart 渲染 agent loop 启动日志（含配置参数）。
+func FormatLoopStart(prefix, workDir string, maxTurns int, toolTimeout time.Duration, maxConcurrent int) string {
+	return fmt.Sprintf("[%s] 启动 │ workdir=%s maxTurns=%d toolTimeout=%v maxConcurrent=%d",
+		prefix, workDir, maxTurns, toolTimeout, maxConcurrent)
+}
+
+// FormatTurnStart 渲染每个 Turn 的头部日志。
+func FormatTurnStart(prefix string, turn, historyLen, toolsLen int) string {
+	return fmt.Sprintf("[%s] Turn %d │ history=%d tools=%d", prefix, turn, historyLen, toolsLen)
+}
+
+// FormatTurnDone 渲染 Turn 无工具调用时的任务完成日志。
+func FormatTurnDone(prefix string, turn int, llmDuration, totalDuration time.Duration) string {
+	return fmt.Sprintf("[%s] Turn %d │ 任务完成 │ llm=%s total=%s",
+		prefix, turn, llmDuration, totalDuration)
+}
+
+// FormatObservation 渲染工具执行结束后的 Observation 注入日志。
+func FormatObservation(prefix string, turn, historyLen int, llmDuration, toolsDuration, turnDuration time.Duration) string {
+	return fmt.Sprintf("[%s] Turn %d │ Observation │ history=%d llm=%s tools=%s turn=%s",
+		prefix, turn, historyLen, llmDuration, toolsDuration, turnDuration)
+}
+
+// FormatLoopEnd 渲染 agent loop 正常结束日志。
+func FormatLoopEnd(prefix string, turns int, totalDuration time.Duration) string {
+	return fmt.Sprintf("[%s] 循环结束 │ turns=%d total=%s", prefix, turns, totalDuration)
+}
+
+// FormatParallelTools 渲染并行工具执行开始日志。
+func FormatParallelTools(prefix string, turn, count, maxConcurrent int) string {
+	return fmt.Sprintf("[%s] Turn %d │ 并行执行 %d 个工具 │ maxConcurrent=%d",
+		prefix, turn, count, maxConcurrent)
 }
 
 // encodeJSONNoEscape 使用 json.Encoder 重新编码原始 JSON，关闭 HTML 字符转义

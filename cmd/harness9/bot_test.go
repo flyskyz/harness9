@@ -72,11 +72,6 @@ func (s *mockSession) NotifyThinking(ctx context.Context) error {
 	return nil
 }
 
-func (s *mockSession) UpdateThinkingContent(ctx context.Context, text string) error {
-	s.record("UpdateThinkingContent", text)
-	return nil
-}
-
 func (s *mockSession) NotifyToolStart(ctx context.Context, tc schema.ToolCall) error {
 	s.record("NotifyToolStart", tc)
 	return nil
@@ -167,10 +162,9 @@ func (c *sessionCapturingChannel) NewSession(_, _ string) imchannel.Session { re
 
 // ---- 辅助函数 ----
 
-// buildEngine 构造一个使用给定 Provider 的 AgentEngine（禁用 Thinking，工具超时 5s）。
+// buildEngine 构造一个使用给定 Provider 的 AgentEngine（工具超时 5s）。
 func buildEngine(p provider.LLMProvider, reg tools.Registry) *engine.AgentEngine {
 	return engine.NewAgentEngine(p, reg, "/test",
-		engine.WithThinking(false),
 		engine.WithToolTimeout(5*time.Second),
 	)
 }

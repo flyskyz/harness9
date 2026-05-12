@@ -189,3 +189,42 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// TestFormatMsg 验证通用单行日志条目的前缀拼接格式。
+func TestFormatMsg(t *testing.T) {
+	got := FormatMsg("server", "RunStream 启动失败: timeout")
+	want := "[server] RunStream 启动失败: timeout"
+	if got != want {
+		t.Errorf("FormatMsg = %q, want %q", got, want)
+	}
+}
+
+// TestFormatLoopStart 验证启动日志包含所有关键参数字段。
+func TestFormatLoopStart(t *testing.T) {
+	got := FormatLoopStart("engine", "/work", 50, 60*time.Second, 4)
+	for _, want := range []string{"[engine]", "workdir=/work", "maxTurns=50", "toolTimeout=1m0s", "maxConcurrent=4"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("FormatLoopStart missing %q in: %q", want, got)
+		}
+	}
+}
+
+// TestFormatTurnStart 验证 Turn 头部日志包含 turn 编号、history 和 tools 字段。
+func TestFormatTurnStart(t *testing.T) {
+	got := FormatTurnStart("engine-stream", 3, 7, 4)
+	for _, want := range []string{"[engine-stream]", "Turn 3", "history=7", "tools=4"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("FormatTurnStart missing %q in: %q", want, got)
+		}
+	}
+}
+
+// TestFormatLoopEnd 验证结束日志包含 turns 和 total 字段。
+func TestFormatLoopEnd(t *testing.T) {
+	got := FormatLoopEnd("engine", 5, 3*time.Second)
+	for _, want := range []string{"[engine]", "turns=5", "total=3s"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("FormatLoopEnd missing %q in: %q", want, got)
+		}
+	}
+}

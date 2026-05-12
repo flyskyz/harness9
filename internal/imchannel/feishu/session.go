@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -12,9 +11,6 @@ import (
 
 	"github.com/harness9/internal/schema"
 )
-
-// maxThinkingRunes 是思考摘要消息中显示的最大 Unicode 字符数。
-const maxThinkingRunes = 400
 
 // Session 是 imchannel.Session 接口的飞书实现。
 //
@@ -24,14 +20,12 @@ const maxThinkingRunes = 400
 // 消息序列示例：
 //
 //	🤔 思考中...
-//	💭 用户想查询工作区文件，需要调用 bash 工具...
 //	🔧 调用工具：bash
 //	✅ bash（123ms）
 //	（最终回复文本）
 //
-// 并发安全：Session 本身无可变状态（仅持有 client 和 chatID），sendText 的每次调用
-// 均为独立的 HTTP 请求，多 goroutine 同时调用不同方法（如 NotifyToolStart / NotifyToolDone）
-// 是安全的。消息顺序由飞书服务端的接收顺序决定，不保证与发送顺序完全一致。
+// 并发安全：Session 本身无可变状态，sendText 的每次调用均为独立 HTTP 请求，
+// 多 goroutine 并发调用不同方法是安全的。消息顺序由飞书服务端接收顺序决定。
 type Session struct {
 	client *lark.Client
 	chatID string
@@ -40,15 +34,6 @@ type Session struct {
 // NotifyThinking 发送"思考中"占位消息，表示 Agent 开始处理。
 func (s *Session) NotifyThinking(ctx context.Context) error {
 	return s.sendText(ctx, "🤔 思考中...")
-}
-
-// UpdateThinkingContent 将 Phase 1（Thinking）的推理摘要发送为独立消息。
-// 若 text 为空则静默跳过（防御性保护，避免发送空消息）。
-func (s *Session) UpdateThinkingContent(ctx context.Context, text string) error {
-	if strings.TrimSpace(text) == "" {
-		return nil
-	}
-	return s.sendText(ctx, "💭 "+truncateRunes(text, maxThinkingRunes))
 }
 
 // NotifyToolStart 发送工具调用开始消息。
