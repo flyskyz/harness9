@@ -177,6 +177,13 @@ harness9/
 │       ├── agent-loop.md            # Agent Loop 核心实现原理（Two-Stage ReAct 详解）
 │       ├── tool-calling.md          # Tool Calling 工具调用系统详解
 │       └── im-channel.md            # IM 渠道接入详解（飞书 Bot 实现原理）
+├── knowledge/                       # Harness 知识库（AI 技术动态采集 → 分析 → 文章生成）
+│   ├── raw/                         # 原始采集数据，按日期分目录（collector agent 写入）
+│   │   └── {YYYYMMDD}/              # 当日各来源 JSON 文件
+│   ├── analysis/                    # AI 分析结果，按日期分目录（analyzer agent 写入）
+│   │   └── {YYYYMMDD}/              # 当日各来源分析 JSON 文件
+│   └── articles/                    # 最终知识文章（organizer agent 写入）
+│       └── {id}.md                  # 标准知识文章（Markdown + YAML frontmatter）
 ├── .env.example                     # 环境变量配置模板
 ├── go.mod                           # Go 模块定义
 ├── go.sum                           # 依赖锁定
