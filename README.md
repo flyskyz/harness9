@@ -47,21 +47,17 @@
 
 ## 核心特性
 
-### Two-Stage ReAct 循环
+### 标准 ReAct 循环
 
-harness9 独创的 **剥夺-恢复工具策略**：
+每个 Turn 执行一次 LLM 调用（携带完整工具列表），工具结果作为 Observation 注入上下文，驱动下一轮推理：
 
 ```
-传统 ReAct（单阶段）:
-  Turn N: LLM(messages, tools) → 可能缺乏深思熟虑的行动
+Turn N:
+  LLM(messages, tools) → Action（含工具调用时）
+  → 并发执行工具 → Observation 注入 → Turn N+1
 
-Two-Stage ReAct（harness9）:
-  Turn N:
-    Phase 1: LLM(messages, tools=nil) → 被迫深度思考
-    Phase 2: LLM(messages + thinking, tools=all) → 基于思考的精准行动
+自然终止：模型不再发起工具调用 → 输出最终回复
 ```
-
-Phase 1 传入 `nil` 工具列表，剥夺模型的行动能力，强制其进行纯文本推理。Phase 2 恢复完整工具列表，模型基于 Phase 1 的思考制定精准行动计划。
 
 详见 [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md)。
 
@@ -101,7 +97,6 @@ for evt := range stream {
 
 ```
 🤔 思考中...
-💭 <思考摘要>
 🔧 调用工具：bash
 ✅ bash（123ms）
 <最终回复>
@@ -200,7 +195,7 @@ func main() {
 
 | 模块 | 说明 | 状态 |
 |------|------|:----:|
-| **Engine** | Two-Stage ReAct 主循环，阻塞 + 流式双模式 | ✅ |
+| **Engine** | 标准 ReAct 主循环，阻塞 + 流式双模式 | ✅ |
 | **Provider** | LLM 统一接口，OpenAI / Anthropic 适配器 | ✅ |
 | **Schema** | 跨组件共享的核心数据类型 | ✅ |
 | **Tools** | 工具注册表 + 内置工具（bash / read_file / write_file / edit_file） | ✅ |
@@ -253,11 +248,11 @@ harness9/
 │   │   ├── env.go                   # 零依赖 .env 加载器
 │   │   └── env_test.go
 │   └── logfmt/
-│       ├── format.go                # FormatToolStart/Done + FormatJSON + FormatOutput
+│       ├── format.go                # 块状日志格式化（FormatMsg/ToolStart/LoopStart 等）
 │       └── format_test.go
 ├── docs/
 │   └── 核心功能/
-│       ├── agent-loop.md            # Two-Stage ReAct 设计原理详解
+│       ├── agent-loop.md            # Agent Loop 核心实现原理（标准 ReAct 设计）
 │       ├── tool-calling.md          # Tool Calling 工具调用系统详解
 │       └── im-channel.md            # IM 渠道接入详解（飞书 Bot 实现原理）
 ├── knowledge/                       # AI 技术动态知识库（采集 → 分析 → 文章）
@@ -273,7 +268,7 @@ harness9/
 
 | 文档 | 内容 |
 |------|------|
-| [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md) | Two-Stage ReAct 设计理念、数据模型、流式架构 |
+| [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md) | 标准 ReAct 设计原理、emitter 抽象、流式架构 |
 | [Tool Calling 工具调用系统](docs/核心功能/tool-calling.md) | 工具接口、并发模型、内置工具详解、扩展指南 |
 | [IM 渠道接入详解](docs/核心功能/im-channel.md) | 飞书 Bot 实现原理、接口契约、事件映射规则 |
 | [AGENTS.md](AGENTS.md) | 项目开发规范、编码标准、架构决策 |
@@ -284,10 +279,10 @@ harness9/
 
 | 框架 | 优势 | 与 harness9 的差异 |
 |------|------|-------------------|
-| Claude Agent SDK | 深度 Anthropic 集成 | Extended Thinking 在 API 内置，不分离阶段 |
-| OpenAI Agents SDK | 官方支持，生态完整 | Handoffs 机制，非 Go 原生 |
-| OpenHarness | 显式循环设计清晰 | Python，无两阶段思考分离 |
-| OpenCode | Plan/Build Agent 切换 | TypeScript，通过独立 Agent 而非 Turn 内阶段分离 |
+| Claude Agent SDK | 深度 Anthropic 集成 | 官方 SDK，仅支持 Anthropic；harness9 多 Provider，Go 原生 |
+| OpenAI Agents SDK | 官方支持，生态完整 | Python 框架，Handoffs 多 Agent 机制；harness9 为 Go 原生单 Agent |
+| OpenHarness | 显式循环设计清晰 | Python；harness9 Go 原生，含 IM 渠道适配层 |
+| OpenCode | Plan/Build Agent 切换 | TypeScript；harness9 标准 ReAct，Go 原生，更轻量 |
 
 ---
 
