@@ -45,9 +45,8 @@ func (c *Channel) SetMessageHandler(handler imchannel.MessageHandler) {
 // NewSession 为一条入站消息创建对应的飞书 Session。
 func (c *Channel) NewSession(chatID, messageID string) imchannel.Session {
 	return &Session{
-		client:    c.client,
-		chatID:    chatID,
-		lineIndex: make(map[string]int),
+		client: c.client,
+		chatID: chatID,
 	}
 }
 

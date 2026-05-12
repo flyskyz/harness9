@@ -131,15 +131,19 @@ func (s *Server) handleMessage(ctx context.Context, msg imchannel.IncomingMessag
 			}
 
 		case engine.EventDone:
-			// 对于无工具调用的轮次，确保思考内容也能展示在进度消息中。
-			flushThinking()
-			// Action 文本优先；若为空则用 Thinking 兜底（模型将回答放在思考阶段时）。
 			finalText := reply.String()
-			if finalText == "" {
-				finalText = lastThinking.String()
-			}
-			if err := session.SendReply(ctx, finalText); err != nil {
-				log.Printf("[server] SendReply 失败: %v", err)
+			if finalText != "" {
+				// Action 有文本：先推送思考内容（如有），再发送 Action 文本作为最终回复。
+				flushThinking()
+				if err := session.SendReply(ctx, finalText); err != nil {
+					log.Printf("[server] SendReply 失败: %v", err)
+				}
+			} else {
+				// Action 为空：thinking 本身就是最终回复（Two-Stage ReAct 的退化情况），
+				// 直接发送不再额外推送 UpdateThinkingContent，避免同一内容出现两次。
+				if err := session.SendReply(ctx, lastThinking.String()); err != nil {
+					log.Printf("[server] SendReply 失败: %v", err)
+				}
 			}
 
 		case engine.EventError:
