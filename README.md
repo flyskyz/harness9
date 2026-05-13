@@ -47,6 +47,36 @@
 
 ## 核心特性
 
+### 交互式 CLI（默认模式）
+
+直接在终端与 Agent 对话，无需配置飞书：
+
+```
+$ go run ./cmd/harness9
+harness9 │ 输入 "exit" 或按 Ctrl-C 退出
+
+harness9> 帮我分析 internal/engine/agent_loop.go 的结构
+harness9> 列出目录下所有 Go 文件并统计行数
+harness9> exit
+再见！
+```
+
+详见 [CLI 使用指南](docs/核心功能/cli.md)。
+
+### Agent Skills（按需加载的领域知识）
+
+在 `WORK_DIR/skills/` 下放置 Markdown 文件，Agent 启动时感知索引，按需加载全文。遵循 **Progressive Disclosure** 原则，System Prompt 始终精简：
+
+```
+your-project/
+├── skills/
+│   ├── refactor-guide.md    # 重构规范
+│   └── testing-standards.md # 测试标准
+└── AGENTS.md                # 项目级规范（自动注入 System Prompt）
+```
+
+详见 [Agent Skills 设计原理](docs/核心功能/agent-skills.md)。
+
 ### 标准 ReAct 循环
 
 每个 Turn 执行一次 LLM 调用（携带完整工具列表），工具结果作为 Observation 注入上下文，驱动下一轮推理：
@@ -91,9 +121,13 @@ for evt := range stream {
 }
 ```
 
-### 飞书 Bot 接入
+### 飞书 Bot 接入（可选）
 
-通过 WebSocket 长连接接收飞书私聊消息，无需公网 IP 或内网穿透。每条消息触发独立的 Agent 循环，实时推送思考进度和工具调用状态：
+通过 `--feishu` 标志启动飞书 Bot 模式，WebSocket 长连接接收消息，实时推送思考进度：
+
+```bash
+go run ./cmd/harness9 --feishu
+```
 
 ```
 🤔 思考中...
@@ -122,9 +156,9 @@ ToolResult{ToolCallID: id, Output: "command not found: foo", IsError: true}
 ### 环境要求
 
 - Go 1.25+
-- OpenAI 或 Anthropic API Key
+- OpenAI 或兼容 API Key（OpenRouter、Azure 等）
 
-### 安装 & 运行
+### 安装 & 启动 CLI
 
 ```bash
 # 克隆项目
@@ -133,13 +167,72 @@ cd harness9
 
 # 复制并填写 API 配置
 cp .env.example .env
-# 编辑 .env，填入 OPENAI_API_KEY、FEISHU_APP_ID 等配置
+# 编辑 .env，至少填入 OPENAI_API_KEY
 
-# 构建
-go build ./cmd/harness9
-
-# 运行飞书 Bot
+# 启动 CLI（默认模式，无需飞书配置）
 go run ./cmd/harness9
+```
+
+### 配置说明
+
+`.env` 文件：
+
+```env
+OPENAI_API_KEY=sk-...
+
+# 可选：指定 Agent 工作目录（默认为进程 cwd，通常无需设置）
+# WORK_DIR=/Users/yourname/myproject
+
+# 可选：切换模型
+LLM_MODEL=openai/gpt-4o-mini
+
+# 可选：使用 OpenRouter 或其他兼容 API
+# OPENAI_BASE_URL=https://openrouter.ai/api/v1
+```
+
+### 添加 Project Guidelines
+
+在 `WORK_DIR` 根目录放置 `AGENTS.md`，启动时自动注入 System Prompt：
+
+```markdown
+# 我的项目规范
+
+## 技术栈
+- Go 1.25、PostgreSQL 16
+
+## 编码规范
+- 所有函数必须有注释
+- 禁止直接操作数据库，必须通过 Repository 层
+```
+
+### 添加 Skills
+
+在 `WORK_DIR/skills/` 下放置 `.md` 文件：
+
+```markdown
+---
+name: refactor-guide
+description: Use when refactoring Go code — explains team conventions
+---
+
+# 重构规范
+
+1. 先运行 go vet，修复所有 warning
+2. 保持函数不超过 50 行
+...
+```
+
+### 启动飞书 Bot（可选）
+
+需额外配置飞书凭证：
+
+```bash
+# .env 中添加
+FEISHU_APP_ID=cli_xxx
+FEISHU_APP_SECRET=xxx
+
+# 启动
+go run ./cmd/harness9 --feishu
 ```
 
 ### 测试
@@ -157,7 +250,6 @@ package main
 import (
     "context"
     "log"
-    "time"
 
     "github.com/harness9/internal/engine"
     "github.com/harness9/internal/provider"
@@ -167,7 +259,7 @@ import (
 func main() {
     workDir := "/your/project"
 
-    p, err := provider.NewOpenAIProvider("gpt-4o")
+    p, err := provider.NewOpenAIProvider("gpt-4o-mini")
     if err != nil {
         log.Fatalf("init provider: %v", err)
     }
@@ -178,10 +270,7 @@ func main() {
     registry.Register(tools.NewWriteFileTool(workDir))
     registry.Register(tools.NewEditFileTool(workDir))
 
-    eng := engine.NewAgentEngine(p, registry, workDir,
-        engine.WithMaxTurns(50),
-        engine.WithToolTimeout(30*time.Second),
-    )
+    eng := engine.NewAgentEngine(p, registry, workDir)
 
     if err := eng.Run(context.Background(), "帮我列出当前目录下的所有 Go 文件"); err != nil {
         log.Fatalf("run: %v", err)
@@ -196,6 +285,8 @@ func main() {
 | 模块 | 说明 | 状态 |
 |------|------|:----:|
 | **Engine** | 标准 ReAct 主循环，阻塞 + 流式双模式 | ✅ |
+| **Context** | System Prompt 结构化组装（基础 + AGENTS.md + Skills 索引） | ✅ |
+| **Skills** | Skills 解析、索引、按需加载（`use_skill` 工具） | ✅ |
 | **Provider** | LLM 统一接口，OpenAI / Anthropic 适配器 | ✅ |
 | **Schema** | 跨组件共享的核心数据类型 | ✅ |
 | **Tools** | 工具注册表 + 内置工具（bash / read_file / write_file / edit_file） | ✅ |
@@ -211,15 +302,25 @@ func main() {
 harness9/
 ├── cmd/
 │   └── harness9/
-│       ├── main.go                  # 程序入口，组装各模块并启动飞书 Bot Server
+│       ├── main.go                  # 程序入口：CLI（默认）或飞书 Bot（--feishu）
+│       ├── cli.go                   # 交互式 CLI REPL 实现
 │       ├── bot.go                   # Bot 编排层（IMChannel × AgentEngine，事件流映射）
 │       └── bot_test.go              # Bot 事件映射单元测试
 ├── internal/
 │   ├── engine/
-│   │   ├── agent_loop.go            # 共享 runLoop + 阻塞式 Run
+│   │   ├── agent_loop.go            # 共享 runLoop + 阻塞式 Run + PromptBuilder 接口
 │   │   ├── agent_loop_test.go       # 主循环单元测试
 │   │   ├── stream.go                # 流式入口 RunStream + engine.Event 事件类型
 │   │   └── stream_test.go           # 流式接口单元测试
+│   ├── context/
+│   │   ├── builder.go               # DefaultPromptBuilder（组装 System Prompt）
+│   │   └── builder_test.go
+│   ├── skills/
+│   │   ├── skill.go                 # Skill 数据结构 + frontmatter 解析
+│   │   ├── index.go                 # Index：Summary() + GetFullContent()
+│   │   ├── loader.go                # LoadSkills(dir) → *Index
+│   │   ├── use_skill_tool.go        # use_skill 工具（实现 tools.BaseTool）
+│   │   └── skills_test.go           # Skills 系统单元测试（20 个测试用例）
 │   ├── imchannel/
 │   │   ├── channel.go               # IMChannel / Session 接口定义
 │   │   └── feishu/
@@ -248,13 +349,19 @@ harness9/
 │   │   ├── env.go                   # 零依赖 .env 加载器
 │   │   └── env_test.go
 │   └── logfmt/
-│       ├── format.go                # 块状日志格式化（FormatMsg/ToolStart/LoopStart 等）
+│       ├── format.go                # 块状日志格式化
 │       └── format_test.go
 ├── docs/
 │   └── 核心功能/
-│       ├── agent-loop.md            # Agent Loop 核心实现原理（标准 ReAct 设计）
+│       ├── cli.md                   # CLI 使用指南（本文档）
+│       ├── agent-skills.md          # Agent Skills 设计原理
+│       ├── agent-loop.md            # Agent Loop 核心实现原理
 │       ├── tool-calling.md          # Tool Calling 工具调用系统详解
 │       └── im-channel.md            # IM 渠道接入详解（飞书 Bot 实现原理）
+├── skills/                          # 示例 Skills（可复制到你的项目中使用）
+│   ├── go-coding-standards.md
+│   ├── debugging-guide.md
+│   └── architecture-overview.md
 ├── knowledge/                       # AI 技术动态知识库（采集 → 分析 → 文章）
 ├── .env.example                     # 环境变量配置模板
 ├── go.mod
@@ -268,7 +375,9 @@ harness9/
 
 | 文档 | 内容 |
 |------|------|
-| [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md) | 标准 ReAct 设计原理、emitter 抽象、流式架构 |
+| [CLI 使用指南](docs/核心功能/cli.md) | 启动、环境变量、AGENTS.md、Skills 配置、常见问题 |
+| [Agent Skills 设计原理](docs/核心功能/agent-skills.md) | Progressive Disclosure、frontmatter 规范、use_skill 工具 |
+| [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md) | 标准 ReAct 设计原理、PromptBuilder、流式架构 |
 | [Tool Calling 工具调用系统](docs/核心功能/tool-calling.md) | 工具接口、并发模型、内置工具详解、扩展指南 |
 | [IM 渠道接入详解](docs/核心功能/im-channel.md) | 飞书 Bot 实现原理、接口契约、事件映射规则 |
 | [AGENTS.md](AGENTS.md) | 项目开发规范、编码标准、架构决策 |

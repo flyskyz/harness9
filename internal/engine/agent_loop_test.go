@@ -267,3 +267,60 @@ func (r *timeoutCheckRegistry) Execute(ctx context.Context, call schema.ToolCall
 	}
 	return schema.ToolResult{ToolCallID: call.ID, Output: "ok"}
 }
+
+// mockPromptBuilder 是 PromptBuilder 接口的测试桩。
+type mockPromptBuilder struct {
+	content string
+}
+
+func (m *mockPromptBuilder) Build() string { return m.content }
+
+// TestWithPromptBuilder_CustomContent 验证 WithPromptBuilder 使自定义内容作为 system prompt 传入。
+func TestWithPromptBuilder_CustomContent(t *testing.T) {
+	customPrompt := "custom system prompt for testing"
+	p := &countingProvider{
+		responses: []func(tools []schema.ToolDefinition) *schema.Message{
+			func(_ []schema.ToolDefinition) *schema.Message {
+				return &schema.Message{Role: schema.RoleAssistant, Content: "done"}
+			},
+		},
+	}
+	r := &staticRegistry{}
+	eng := NewAgentEngine(p, r, "/test", WithPromptBuilder(&mockPromptBuilder{content: customPrompt}))
+
+	_ = eng.Run(context.Background(), "test")
+
+	if len(p.calls) == 0 {
+		t.Fatal("expected at least 1 Generate call")
+	}
+	systemMsg := p.calls[0].messages[0]
+	if systemMsg.Role != schema.RoleSystem {
+		t.Fatalf("first message should be system role, got %q", systemMsg.Role)
+	}
+	if systemMsg.Content != customPrompt {
+		t.Errorf("system prompt: got %q, want %q", systemMsg.Content, customPrompt)
+	}
+}
+
+// TestWithPromptBuilder_FallbackDefault 验证未设置 PromptBuilder 时使用内置默认文案。
+func TestWithPromptBuilder_FallbackDefault(t *testing.T) {
+	p := &countingProvider{
+		responses: []func(tools []schema.ToolDefinition) *schema.Message{
+			func(_ []schema.ToolDefinition) *schema.Message {
+				return &schema.Message{Role: schema.RoleAssistant, Content: "done"}
+			},
+		},
+	}
+	r := &staticRegistry{}
+	eng := NewAgentEngine(p, r, "/fallback/path")
+
+	_ = eng.Run(context.Background(), "test")
+
+	systemMsg := p.calls[0].messages[0]
+	if !strings.Contains(systemMsg.Content, "/fallback/path") {
+		t.Errorf("default prompt should contain workDir, got: %s", systemMsg.Content)
+	}
+	if !strings.Contains(systemMsg.Content, "harness9") {
+		t.Errorf("default prompt should contain 'harness9', got: %s", systemMsg.Content)
+	}
+}

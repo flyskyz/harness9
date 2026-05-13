@@ -35,6 +35,18 @@ func WithMaxConcurrentTools(n int) Option {
 	return func(e *AgentEngine) { e.maxConcurrentTools = n }
 }
 
+// PromptBuilder 构造 Agent 的 system prompt。
+// 接口定义在 engine 包（使用者侧），由 internal/context 包实现。
+// 引擎通过此接口与 Context Engineering 模块解耦。
+type PromptBuilder interface {
+	Build() string
+}
+
+// WithPromptBuilder 设置自定义 PromptBuilder。未设置时使用内置默认文案。
+func WithPromptBuilder(pb PromptBuilder) Option {
+	return func(e *AgentEngine) { e.promptBuilder = pb }
+}
+
 // AgentEngine 是 harness9 agent loop 的核心编排器，将 LLM Provider（"大脑"）
 // 与 Tool Registry（"双手"）组合在一起，执行多轮 ReAct 循环直到任务完成。
 type AgentEngine struct {
@@ -44,6 +56,7 @@ type AgentEngine struct {
 	maxTurns           int
 	toolTimeout        time.Duration
 	maxConcurrentTools int
+	promptBuilder      PromptBuilder
 }
 
 // NewAgentEngine 创建新的 AgentEngine。默认值：maxTurns=50, toolTimeout=60s。
@@ -102,13 +115,8 @@ func (e *AgentEngine) runLoop(ctx context.Context, userPrompt string, logPrefix 
 
 	contextHistory := []schema.Message{
 		{
-			Role: schema.RoleSystem,
-			Content: fmt.Sprintf(
-				"You are harness9, an expert coding assistant. "+
-					"You have full access to tools in the workspace. "+
-					"Your working directory is: %s",
-				e.workDir,
-			),
+			Role:    schema.RoleSystem,
+			Content: e.buildSystemPrompt(),
 		},
 		{Role: schema.RoleUser, Content: userPrompt},
 	}
@@ -163,6 +171,20 @@ func (e *AgentEngine) runLoop(ctx context.Context, userPrompt string, logPrefix 
 
 	log.Print(logfmt.FormatLoopEnd(logPrefix, turnCount, time.Since(overallStart)))
 	return nil
+}
+
+// buildSystemPrompt 返回 system prompt 字符串。
+// 若设置了 PromptBuilder 则委托给它，否则回退到内置默认文案。
+func (e *AgentEngine) buildSystemPrompt() string {
+	if e.promptBuilder != nil {
+		return e.promptBuilder.Build()
+	}
+	return fmt.Sprintf(
+		"You are harness9, an expert coding assistant. "+
+			"You have full access to tools in the workspace. "+
+			"Your working directory is: %s",
+		e.workDir,
+	)
 }
 
 // executeTools 并发执行所有工具调用，每个工具带有独立的超时控制。
