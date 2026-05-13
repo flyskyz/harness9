@@ -82,3 +82,69 @@ var _ = json.RawMessage(nil)
 var _ = os.TempDir
 var _ = filepath.Join
 var _ = strings.Contains
+
+// --- Index tests ---
+
+func TestIndex_IsEmpty(t *testing.T) {
+	empty := &Index{}
+	if !empty.IsEmpty() {
+		t.Error("new Index should be empty")
+	}
+	nonEmpty := &Index{skills: []Skill{{Name: "a", Description: "A"}}}
+	if nonEmpty.IsEmpty() {
+		t.Error("Index with skills should not be empty")
+	}
+}
+
+func TestIndex_Summary_Empty(t *testing.T) {
+	idx := &Index{}
+	if idx.Summary() != "" {
+		t.Error("empty index Summary() should return empty string")
+	}
+}
+
+func TestIndex_Summary_WithSkills(t *testing.T) {
+	idx := &Index{skills: []Skill{
+		{Name: "skill-a", Description: "Desc A"},
+		{Name: "skill-b", Description: "Desc B"},
+	}}
+	got := idx.Summary()
+	if !strings.Contains(got, "skill-a: Desc A") {
+		t.Errorf("summary missing skill-a entry: %q", got)
+	}
+	if !strings.Contains(got, "skill-b: Desc B") {
+		t.Errorf("summary missing skill-b entry: %q", got)
+	}
+}
+
+func TestIndex_GetFullContent_NotFound(t *testing.T) {
+	idx := &Index{}
+	_, err := idx.GetFullContent("nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent skill")
+	}
+	if !strings.Contains(err.Error(), "nonexistent") {
+		t.Errorf("error should mention skill name: %v", err)
+	}
+}
+
+func TestIndex_GetFullContent_Found(t *testing.T) {
+	f, err := os.CreateTemp("", "skill-*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString("---\nname: test-skill\ndescription: Test\n---\n\nSkill body content."); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	idx := &Index{skills: []Skill{{Name: "test-skill", Description: "Test", filePath: f.Name()}}}
+	body, err := idx.GetFullContent("test-skill")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body != "Skill body content." {
+		t.Errorf("body: got %q, want %q", body, "Skill body content.")
+	}
+}
