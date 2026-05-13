@@ -658,3 +658,26 @@ Turn 2:
 | **可观测性** | 结构化日志 `[engine]` / `[engine-stream]` 前缀 + key=value 格式 |
 | **延迟解析** | `json.RawMessage` 用于 Arguments 延迟反序列化；`interface{}` 用于 InputSchema 兼容多 SDK |
 | **自愈能力** | `ToolResult.IsError` 支持模型感知错误并自动重试 |
+
+## PromptBuilder 与 Skills 集成
+
+自 `context-engineering` 分支起，`runLoop` 中的 system prompt 不再硬编码，
+而是通过 `PromptBuilder` 接口动态构建：
+
+```go
+type PromptBuilder interface {
+    Build() string
+}
+```
+
+`WithPromptBuilder(pb PromptBuilder)` Option 将 builder 注入引擎。
+未设置时回退到内置默认文案（向后兼容）。
+
+`internal/context.DefaultPromptBuilder` 的实现按以下顺序组装 prompt：
+
+1. harness9 基础 prompt（角色定义 + workDir）
+2. `workdir/AGENTS.md`（不存在时跳过）
+3. Skills 索引摘要（来自 `internal/skills.Index.Summary()`）
+
+Skills 的全文内容通过 `use_skill` 工具按需加载（Progressive Disclosure），
+不影响基础 ReAct 循环的执行逻辑。
