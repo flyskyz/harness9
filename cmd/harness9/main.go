@@ -105,7 +105,7 @@ func main() {
 		}
 	} else {
 		log.Print(logfmt.FormatMsg("main", fmt.Sprintf("harness9 CLI 启动 │ workDir=%s", workDir)))
-		RunCLI(ctx, eng)
+		RunCLI(ctx, eng, skillsIndex)
 	}
 	log.Print(logfmt.FormatMsg("main", "harness9 正常退出"))
 }

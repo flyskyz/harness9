@@ -55,8 +55,12 @@ func TestBuild_WithSkills(t *testing.T) {
 	if err := os.Mkdir(skillsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
+	skillSubDir := filepath.Join(skillsDir, "go-refactor")
+	if err := os.Mkdir(skillSubDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	skillContent := "---\nname: go-refactor\ndescription: Go refactoring guide\n---\n\nAlways run go vet first."
-	if err := os.WriteFile(filepath.Join(skillsDir, "go-refactor.md"), []byte(skillContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(skillSubDir, "SKILL.md"), []byte(skillContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 

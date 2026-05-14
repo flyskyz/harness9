@@ -65,14 +65,23 @@ harness9> exit
 
 ### Agent Skills（按需加载的领域知识）
 
-在 `WORK_DIR/skills/` 下放置 Markdown 文件，Agent 启动时感知索引，按需加载全文。遵循 **Progressive Disclosure** 原则，System Prompt 始终精简：
+在 `WORK_DIR/skills/` 下放置子目录，每个子目录包含一个 `SKILL.md` 文件。Agent 启动时感知索引，按需加载全文。遵循 **Progressive Disclosure** 原则，System Prompt 始终精简：
 
 ```
 your-project/
 ├── skills/
-│   ├── refactor-guide.md    # 重构规范
-│   └── testing-standards.md # 测试标准
+│   ├── refactor-guide/
+│   │   └── SKILL.md         # 重构规范
+│   └── testing-standards/
+│       └── SKILL.md         # 测试标准
 └── AGENTS.md                # 项目级规范（自动注入 System Prompt）
+```
+
+CLI 模式下支持斜杠命令直接激活技能，绕过 LLM 判断步骤：
+
+```
+harness9> /refactor-guide
+harness9> /refactor-guide 清理 internal/engine/agent_loop.go
 ```
 
 详见 [Agent Skills 设计原理](docs/核心功能/agent-skills.md)。
@@ -207,9 +216,14 @@ LLM_MODEL=openai/gpt-4o-mini
 
 ### 添加 Skills
 
-在 `WORK_DIR/skills/` 下放置 `.md` 文件：
+在 `WORK_DIR/skills/<name>/SKILL.md` 路径创建技能文件：
+
+```bash
+mkdir -p skills/refactor-guide
+```
 
 ```markdown
+# skills/refactor-guide/SKILL.md
 ---
 name: refactor-guide
 description: Use when refactoring Go code — explains team conventions
@@ -221,6 +235,8 @@ description: Use when refactoring Go code — explains team conventions
 2. 保持函数不超过 50 行
 ...
 ```
+
+CLI 模式下可用 `/refactor-guide` 直接激活该技能。
 
 ### 启动飞书 Bot（可选）
 
@@ -359,9 +375,12 @@ harness9/
 │       ├── tool-calling.md          # Tool Calling 工具调用系统详解
 │       └── im-channel.md            # IM 渠道接入详解（飞书 Bot 实现原理）
 ├── skills/                          # 示例 Skills（可复制到你的项目中使用）
-│   ├── go-coding-standards.md
-│   ├── debugging-guide.md
-│   └── architecture-overview.md
+│   ├── go-coding-standards/
+│   │   └── SKILL.md
+│   ├── debugging-guide/
+│   │   └── SKILL.md
+│   └── architecture-overview/
+│       └── SKILL.md
 ├── knowledge/                       # AI 技术动态知识库（采集 → 分析 → 文章）
 ├── .env.example                     # 环境变量配置模板
 ├── go.mod

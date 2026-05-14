@@ -5,12 +5,21 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/harness9/internal/logfmt"
 )
 
-// LoadSkills 扫描 skillsDir 目录下所有 .md 文件并解析 frontmatter 构建 Index。
-// 目录不存在时返回空 Index（不报错），保证零配置可运行。
-// frontmatter 缺少必填字段（name 或 description）的文件被跳过并记录警告日志。
+// LoadSkills 扫描 skillsDir 下各子目录，在每个子目录中读取 SKILL.md 构建 Index。
+// skillsDir 不存在时返回空 Index（不报错），保证零配置可运行。
+// 子目录缺少 SKILL.md、或 SKILL.md 的 frontmatter 缺少必填字段时跳过并记录警告日志。
+//
+// 目录结构约定：
+//
+//	skills/
+//	├── go-refactor/
+//	│   └── SKILL.md
+//	└── testing-guide/
+//	    └── SKILL.md
 func LoadSkills(skillsDir string) (*Index, error) {
 	entries, err := os.ReadDir(skillsDir)
 	if os.IsNotExist(err) {
@@ -22,18 +31,22 @@ func LoadSkills(skillsDir string) (*Index, error) {
 
 	var loaded []Skill
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+		if !entry.IsDir() {
 			continue
 		}
-		filePath := filepath.Join(skillsDir, entry.Name())
+		filePath := filepath.Join(skillsDir, entry.Name(), "SKILL.md")
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Printf("[skills] 跳过 %s: 读取失败: %v", entry.Name(), err)
+			if os.IsNotExist(err) {
+				log.Print(logfmt.FormatMsg("skills", fmt.Sprintf("跳过 %s: 子目录缺少 SKILL.md", entry.Name())))
+			} else {
+				log.Print(logfmt.FormatMsg("skills", fmt.Sprintf("跳过 %s: 读取 SKILL.md 失败: %v", entry.Name(), err)))
+			}
 			continue
 		}
 		name, desc, trigger, _ := parseFrontmatter(string(data))
 		if name == "" || desc == "" {
-			log.Printf("[skills] 跳过 %s: frontmatter 缺少 name 或 description", entry.Name())
+			log.Print(logfmt.FormatMsg("skills", fmt.Sprintf("跳过 %s: frontmatter 缺少 name 或 description", entry.Name())))
 			continue
 		}
 		loaded = append(loaded, Skill{

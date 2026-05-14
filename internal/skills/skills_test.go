@@ -151,10 +151,14 @@ func TestIndex_GetFullContent_Found(t *testing.T) {
 
 // --- LoadSkills tests ---
 
-// writeSkillFile 在指定路径写入 skill 文件内容的测试辅助函数。
-func writeSkillFile(t *testing.T, path, content string) {
+// writeSkillFile 在 dir/<name>/SKILL.md 路径写入 skill 文件内容的测试辅助函数。
+func writeSkillFile(t *testing.T, dir, name, content string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	subDir := filepath.Join(dir, name)
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "SKILL.md"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -182,9 +186,9 @@ func TestLoadSkills_EmptyDir(t *testing.T) {
 
 func TestLoadSkills_ValidSkills(t *testing.T) {
 	dir := t.TempDir()
-	writeSkillFile(t, filepath.Join(dir, "skill-a.md"),
+	writeSkillFile(t, dir, "skill-a",
 		"---\nname: skill-a\ndescription: Skill A desc\n---\n\nBody A")
-	writeSkillFile(t, filepath.Join(dir, "skill-b.md"),
+	writeSkillFile(t, dir, "skill-b",
 		"---\nname: skill-b\ndescription: Skill B desc\n---\n\nBody B")
 
 	idx, err := LoadSkills(dir)
@@ -205,9 +209,9 @@ func TestLoadSkills_ValidSkills(t *testing.T) {
 
 func TestLoadSkills_SkipsInvalidFrontmatter(t *testing.T) {
 	dir := t.TempDir()
-	writeSkillFile(t, filepath.Join(dir, "no-desc.md"),
+	writeSkillFile(t, dir, "no-desc",
 		"---\nname: missing-desc\n---\n\nBody")
-	writeSkillFile(t, filepath.Join(dir, "valid.md"),
+	writeSkillFile(t, dir, "valid",
 		"---\nname: valid-skill\ndescription: Valid skill\n---\n\nBody")
 
 	idx, err := LoadSkills(dir)
@@ -223,22 +227,28 @@ func TestLoadSkills_SkipsInvalidFrontmatter(t *testing.T) {
 	}
 }
 
-func TestLoadSkills_SkipsNonMdFiles(t *testing.T) {
+func TestLoadSkills_SkipsSubdirWithoutSkillMd(t *testing.T) {
 	dir := t.TempDir()
-	writeSkillFile(t, filepath.Join(dir, "not-skill.txt"),
-		"---\nname: txt-skill\ndescription: Text file\n---\n\nBody")
-	writeSkillFile(t, filepath.Join(dir, "real.md"),
+	// 空子目录（无 SKILL.md），应被跳过
+	if err := os.MkdirAll(filepath.Join(dir, "empty-dir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// 顶层散落文件（非子目录），应被跳过
+	if err := os.WriteFile(filepath.Join(dir, "stray.md"), []byte("---\nname: stray\ndescription: Stray\n---\n\nBody"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	writeSkillFile(t, dir, "real",
 		"---\nname: real-skill\ndescription: Real skill\n---\n\nBody")
 
 	idx, err := LoadSkills(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.Contains(idx.Summary(), "txt-skill") {
-		t.Error("non-.md files should be skipped")
+	if strings.Contains(idx.Summary(), "stray") {
+		t.Error("顶层散落 .md 文件不应被加载")
 	}
 	if !strings.Contains(idx.Summary(), "real-skill") {
-		t.Error(".md skill should be loaded")
+		t.Error("子目录 skill 应被正常加载")
 	}
 }
 
