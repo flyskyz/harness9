@@ -238,12 +238,48 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 	return m, readNextEvent(m.eventCh)
 }
 
-// View 实现 tea.Model——渲染完整 TUI 帧（Task 5 完成实现）。
+// View 实现 tea.Model——渲染完整 TUI 帧。
 func (m tuiModel) View() string {
-	return "harness9 TUI loading...\n"
+	if m.width == 0 {
+		return ""
+	}
+
+	const reservedLines = 3 // header + statusbar + input
+	scrollH := m.height - reservedLines
+	if scrollH < 1 {
+		scrollH = 1
+	}
+
+	// Header：logo + 模型名 + workdir
+	header := headerStyle.Width(m.width).Render(
+		fmt.Sprintf("⬡ harness9   %s · %s", m.modelName, m.workDir),
+	)
+
+	// Scrollback：展示最后 scrollH 行，不足时上方填充空行
+	var scrollLines []string
+	if len(m.lines) >= scrollH {
+		scrollLines = m.lines[len(m.lines)-scrollH:]
+	} else {
+		pad := make([]string, scrollH-len(m.lines))
+		scrollLines = append(pad, m.lines...)
+	}
+	scrollContent := strings.Join(scrollLines, "\n")
+
+	// Status Bar（1 行）
+	statusBar := statusBarStyle.Width(m.width).Render(m.statusLine)
+
+	// Input（1 行）
+	inputLine := "› " + m.input.View()
+
+	return strings.Join([]string{header, scrollContent, statusBar, inputLine}, "\n")
 }
 
-// RunTUI 以 AltScreen 模式启动 Bubbletea 程序（Task 5 完成实现）。
+// RunTUI 以 AltScreen 模式启动 Bubbletea 程序。
+// 用户按 Ctrl-C/Ctrl-D（空闲时）退出后返回。
 func RunTUI(ctx context.Context, eng *engine.AgentEngine, idx *skills.Index, workDir, modelName string) error {
-	return nil
+	_ = ctx
+	m := newTUIModel(eng, idx, workDir, modelName)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
 }
