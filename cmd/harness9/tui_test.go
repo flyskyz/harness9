@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +14,7 @@ import (
 
 // newTestModel 返回适合单元测试的 tuiModel（nil engine/skills，固定尺寸）。
 func newTestModel() tuiModel {
-	m := newTUIModel(nil, nil, "/tmp/test", "test-model")
+	m := newTUIModel(nil, nil, context.Background(), "/tmp/test", "test-model")
 	m.width = 80
 	m.height = 24
 	return m
@@ -133,8 +134,8 @@ func TestEventDone_ResetsRunningState(t *testing.T) {
 	if m.statusLine != "" {
 		t.Errorf("statusLine should be cleared, got %q", m.statusLine)
 	}
-	if cancelled {
-		t.Error("EventDone should NOT call cancelFn")
+	if !cancelled {
+		t.Error("EventDone should call cancelFn to release context")
 	}
 }
 

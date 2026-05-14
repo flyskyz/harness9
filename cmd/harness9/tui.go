@@ -80,6 +80,7 @@ type tuiModel struct {
 	toolStart   time.Time
 
 	// 运行时
+	outerCtx    context.Context // 来自 main.go 的外部 context（SIGTERM 等信号）
 	eng         *engine.AgentEngine
 	skillsIndex *skills.Index
 	eventCh     <-chan engine.Event
@@ -88,7 +89,7 @@ type tuiModel struct {
 }
 
 // newTUIModel 构造已初始化的 tuiModel：输入框聚焦，spinner 使用 Dot 样式。
-func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, workDir, modelName string) tuiModel {
+func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, outerCtx context.Context, workDir, modelName string) tuiModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
@@ -103,6 +104,7 @@ func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, workDir, modelName 
 		modelName:   modelName,
 		spinner:     sp,
 		input:       ti,
+		outerCtx:    outerCtx,
 		eng:         eng,
 		skillsIndex: idx,
 	}
@@ -147,7 +149,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				assistantStyle.Render("◆ harness9:"),
 				"",
 			)
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(m.outerCtx)
 			m.cancelFn = cancel
 			m.running = true
 			m.input.Blur()
@@ -217,6 +219,9 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		return m, readNextEvent(m.eventCh)
 
 	case engine.EventDone:
+		if m.cancelFn != nil {
+			m.cancelFn()
+		}
 		m.running = false
 		m.currentTool = ""
 		m.statusLine = ""
@@ -228,6 +233,9 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 
 	case engine.EventError:
 		errMsg, _ := evt.Data.(string)
+		if m.cancelFn != nil {
+			m.cancelFn()
+		}
 		m.running = false
 		m.currentTool = ""
 		m.statusLine = errorStyle.Render("❌ " + errMsg)
@@ -277,9 +285,8 @@ func (m tuiModel) View() string {
 // RunTUI 以 AltScreen 模式启动 Bubbletea 程序。
 // 用户按 Ctrl-C/Ctrl-D（空闲时）退出后返回。
 func RunTUI(ctx context.Context, eng *engine.AgentEngine, idx *skills.Index, workDir, modelName string) error {
-	_ = ctx
-	m := newTUIModel(eng, idx, workDir, modelName)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	m := newTUIModel(eng, idx, ctx, workDir, modelName)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
 	_, err := p.Run()
 	return err
 }
