@@ -222,3 +222,67 @@ func TestKeyEnter_WhenRunning_Ignored(t *testing.T) {
 		t.Error("Enter while agent is running should be ignored")
 	}
 }
+
+func TestKeyPgUp_EntersManualScroll(t *testing.T) {
+	m := newTestModel()
+	// 填充足够多的行触发滚动
+	for i := 0; i < 30; i++ {
+		m.lines = append(m.lines, "line")
+	}
+
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyPgUp})
+
+	if m.viewTop < 0 {
+		t.Error("PgUp should enter manual scroll mode (viewTop >= 0)")
+	}
+}
+
+func TestMouseWheelUp_ScrollsUp(t *testing.T) {
+	m := newTestModel()
+	for i := 0; i < 30; i++ {
+		m.lines = append(m.lines, "line")
+	}
+
+	m = applyUpdate(m, tea.MouseMsg{
+		Button: tea.MouseButtonWheelUp,
+		Action: tea.MouseActionPress,
+	})
+
+	if m.viewTop < 0 {
+		t.Error("MouseWheelUp should enter manual scroll mode (viewTop >= 0)")
+	}
+}
+
+func TestMouseWheelDown_AtBottom_NoChange(t *testing.T) {
+	m := newTestModel()
+	// viewTop=-1（底部），向下滚动不应改变状态
+	m = applyUpdate(m, tea.MouseMsg{
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+
+	if m.viewTop != -1 {
+		t.Errorf("WheelDown at bottom should keep viewTop=-1, got %d", m.viewTop)
+	}
+}
+
+func TestKeyEnd_ReturnsToAutoScroll(t *testing.T) {
+	m := newTestModel()
+	m.viewTop = 5 // 已在手动滚动
+
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyEnd})
+
+	if m.viewTop != -1 {
+		t.Errorf("End should reset to auto-scroll (viewTop=-1), got %d", m.viewTop)
+	}
+}
+
+func TestKeyPgDown_AtBottom_StaysAutoScroll(t *testing.T) {
+	m := newTestModel()
+	// viewTop=-1 时按 PgDn 不应改变状态
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyPgDown})
+
+	if m.viewTop != -1 {
+		t.Errorf("PgDn at auto-scroll bottom should keep viewTop=-1, got %d", m.viewTop)
+	}
+}

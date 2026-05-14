@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/harness9/internal/engine"
@@ -41,6 +44,13 @@ var (
 			Background(lipgloss.Color("235")).
 			Foreground(lipgloss.Color("11")).
 			Padding(0, 1)
+
+	// 工具执行阶段高亮
+	toolRunStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))            // 黄色：运行中
+	toolOKStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))            // 绿色：成功
+	toolErrStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))             // 红色：失败
+	doneStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true) // 绿色粗体：任务完成
+	skillStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))            // 青色：技能激活
 )
 
 // eventMsg 将 engine.Event 包装为 tea.Msg，供 Bubbletea 的 Update 分发。
@@ -70,6 +80,9 @@ type tuiModel struct {
 	// Scrollback：所有已渲染行，仅追加
 	lines []string
 
+	// 滚动状态：-1 表示自动跟随底部（auto-scroll），≥0 表示手动滚动到该行索引
+	viewTop int
+
 	// Footer 组件
 	spinner    spinner.Model
 	statusLine string
@@ -78,6 +91,19 @@ type tuiModel struct {
 	// 当前工具跟踪（用于耗时展示）
 	currentTool string
 	toolStart   time.Time
+
+	// Markdown 流式渲染状态：
+	// streaming 期间将 delta 追加到 pendingReply，
+	// 在工具边界（EventToolStart / EventDone）统一调用 glamour 渲染，
+	// 替换 lines[pendingReplyStart:] 中的原始文本。
+	pendingReply      string
+	pendingReplyStart int
+
+	// Tab 斜杠命令补全状态
+	typedPrefix    string   // 首次按 Tab 时的输入前缀（非空表示正在补全循环中）
+	completions    []string // 与 typedPrefix 匹配的技能名列表
+	completionIdx  int      // 当前循环位置
+	completionHint string   // idle 时状态栏展示的补全提示
 
 	// 运行时
 	outerCtx    context.Context // 来自 main.go 的外部 context（SIGTERM 等信号）
@@ -107,6 +133,7 @@ func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, outerCtx context.Co
 		outerCtx:    outerCtx,
 		eng:         eng,
 		skillsIndex: idx,
+		viewTop:     -1, // -1 = 自动跟随底部
 	}
 }
 
@@ -123,6 +150,18 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
+	case tea.MouseMsg:
+		// 鼠标滚轮滚动（需 tea.WithMouseCellMotion() 启用）
+		if msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m = m.scrollBy(-3)
+			case tea.MouseButtonWheelDown:
+				m = m.scrollBy(3)
+			}
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyCtrlD:
@@ -131,6 +170,23 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, tea.Quit
+		case tea.KeyPgUp, tea.KeyCtrlUp:
+			scrollH := m.scrollHeight()
+			m = m.scrollBy(-(scrollH / 2))
+			return m, nil
+		case tea.KeyPgDown, tea.KeyCtrlDown:
+			scrollH := m.scrollHeight()
+			m = m.scrollBy(scrollH / 2)
+			return m, nil
+		case tea.KeyEnd:
+			m.viewTop = -1
+			return m, nil
+		case tea.KeyTab:
+			if !m.running {
+				m = m.cycleCompletion()
+				m.completionHint = m.buildCompletionHint()
+			}
+			return m, nil
 		case tea.KeyEnter:
 			if m.running {
 				return m, nil
@@ -140,15 +196,32 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.input.Reset()
+			// 清除补全状态
+			m.typedPrefix = ""
+			m.completions = nil
+			m.completionHint = ""
+
+			// 显示用户消息
+			m.lines = append(m.lines, userMsgStyle.Render("▶ You: ")+raw)
+
+			// 处理斜杠命令 / 普通输入
 			prompt, ok := resolvePrompt(raw, m.skillsIndex)
 			if !ok {
-				return m, nil
+				name := strings.TrimPrefix(strings.SplitN(raw, " ", 2)[0], "/")
+				m.lines = append(m.lines, errorStyle.Render("  ✗ 技能未找到: "+name))
+				m.input.Focus()
+				return m, textinput.Blink
 			}
-			m.lines = append(m.lines,
-				userMsgStyle.Render("▶ You: ")+raw,
-				assistantStyle.Render("◆ harness9:"),
-				"",
-			)
+			if strings.HasPrefix(raw, "/") && m.skillsIndex != nil {
+				name := strings.TrimPrefix(strings.SplitN(raw, " ", 2)[0], "/")
+				m.lines = append(m.lines, skillStyle.Render("  ◎ 技能已加载: "+name))
+			}
+
+			// 开启 assistant 回复区域
+			m.lines = append(m.lines, assistantStyle.Render("◆ harness9:"), "")
+			m.pendingReplyStart = len(m.lines) - 1 // 指向末尾的空字符串
+			m.pendingReply = ""
+
 			ctx, cancel := context.WithCancel(m.outerCtx)
 			m.cancelFn = cancel
 			m.running = true
@@ -182,6 +255,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !m.running {
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
+		// 非 Tab 的按键重置补全循环，重新计算提示
+		if _, isKey := msg.(tea.KeyMsg); isKey {
+			m.typedPrefix = ""
+			m.completions = nil
+		}
+		m.completionHint = m.buildCompletionHint()
 		return m, cmd
 	}
 	return m, nil
@@ -192,47 +271,56 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 	switch evt.Type {
 	case engine.EventActionDelta:
 		delta, _ := evt.Data.(string)
-		if len(m.lines) == 0 {
-			m.lines = append(m.lines, "")
-		}
-		m.lines[len(m.lines)-1] += delta
+		m.pendingReply += delta
+		// 原始文本回写到 lines，等工具边界时用 glamour 统一渲染
+		rawLines := strings.Split(m.pendingReply, "\n")
+		m.lines = append(m.lines[:m.pendingReplyStart], rawLines...)
 		return m, readNextEvent(m.eventCh)
 
 	case engine.EventToolStart:
+		// 工具启动前先渲染当前累积的文本块
+		m = m.flushPendingReply()
 		tc, _ := evt.Data.(schema.ToolCall)
 		m.currentTool = tc.Name
 		m.toolStart = time.Now()
-		m.statusLine = fmt.Sprintf("  %s...", tc.Name)
+		m.statusLine = toolRunStyle.Render(fmt.Sprintf("  ⠿ %s...", tc.Name))
 		return m, tea.Batch(readNextEvent(m.eventCh), tea.Cmd(m.spinner.Tick))
 
 	case engine.EventToolResult:
 		result, _ := evt.Data.(schema.ToolResult)
 		elapsed := time.Since(m.toolStart).Round(time.Millisecond)
-		mark := "✓"
+		var line string
 		if result.IsError {
-			mark = "✗"
+			line = toolErrStyle.Render(fmt.Sprintf("  ✗ %s", m.currentTool)) + dimStyle.Render(fmt.Sprintf(" — %s", elapsed))
+		} else {
+			line = toolOKStyle.Render(fmt.Sprintf("  ✓ %s", m.currentTool)) + dimStyle.Render(fmt.Sprintf(" — %s", elapsed))
 		}
-		line := dimStyle.Render(fmt.Sprintf("  %s %s — %s", mark, m.currentTool, elapsed))
 		m.lines = append(m.lines, line)
+		m.pendingReplyStart = len(m.lines) // 下一个回复文本块从这里开始
 		m.currentTool = ""
 		m.statusLine = ""
 		return m, readNextEvent(m.eventCh)
 
 	case engine.EventDone:
+		m = m.flushPendingReply()
 		if m.cancelFn != nil {
 			m.cancelFn()
 		}
 		m.running = false
 		m.currentTool = ""
 		m.statusLine = ""
+		// 纯工具执行无文字回复时，补充完成标记
 		if len(m.lines) > 0 && m.lines[len(m.lines)-1] == "" {
-			m.lines[len(m.lines)-1] = dimStyle.Render("✅ 任务完成")
+			m.lines[len(m.lines)-1] = doneStyle.Render("  ✅ 任务完成")
 		}
 		m.input.Focus()
 		return m, textinput.Blink
 
 	case engine.EventError:
 		errMsg, _ := evt.Data.(string)
+		// 丢弃未渲染的原始流式文本
+		m.lines = m.lines[:m.pendingReplyStart]
+		m.pendingReply = ""
 		if m.cancelFn != nil {
 			m.cancelFn()
 		}
@@ -246,16 +334,160 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 	return m, readNextEvent(m.eventCh)
 }
 
+// scrollHeight 返回 scrollback 区域可显示的行数（终端高度减去固定 footer 行）。
+func (m tuiModel) scrollHeight() int {
+	const reservedLines = 3
+	h := m.height - reservedLines
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+// scrollBy 将视口向上（delta<0）或向下（delta>0）移动 delta 行。
+// viewTop=-1 表示自动跟随底部；到达底部时自动切回 -1。
+func (m tuiModel) scrollBy(delta int) tuiModel {
+	scrollH := m.scrollHeight()
+	total := len(m.lines)
+	if total <= scrollH {
+		return m // 内容不足一屏，无需滚动
+	}
+	if m.viewTop < 0 {
+		// 从自动模式进入手动模式：以当前底部位置为起点
+		m.viewTop = total - scrollH
+	}
+	m.viewTop += delta
+	if m.viewTop <= 0 {
+		m.viewTop = 0
+	}
+	if m.viewTop >= total-scrollH {
+		m.viewTop = -1 // 回到底部自动模式
+	}
+	return m
+}
+
+// cycleCompletion 处理 Tab 键：首次进入补全模式，或在匹配列表中循环切换。
+func (m tuiModel) cycleCompletion() tuiModel {
+	raw := m.input.Value()
+	if !strings.HasPrefix(raw, "/") || m.skillsIndex == nil {
+		return m
+	}
+	prefix := strings.TrimPrefix(strings.SplitN(raw, " ", 2)[0], "/")
+
+	if m.typedPrefix == "" {
+		// 首次按 Tab：以当前输入作为前缀，初始化补全列表
+		var matches []string
+		for _, n := range m.skillsIndex.Names() {
+			if strings.HasPrefix(n, prefix) {
+				matches = append(matches, n)
+			}
+		}
+		if len(matches) == 0 {
+			return m
+		}
+		m.typedPrefix = prefix
+		m.completions = matches
+		m.completionIdx = 0
+	} else if len(m.completions) > 0 {
+		// 已在补全模式：循环到下一个
+		m.completionIdx = (m.completionIdx + 1) % len(m.completions)
+	}
+
+	if len(m.completions) > 0 {
+		m.input.SetValue("/" + m.completions[m.completionIdx])
+		m.input.CursorEnd()
+	}
+	return m
+}
+
+// buildCompletionHint 根据当前输入生成状态栏的补全提示文字。
+// 空输入或非斜杠命令时返回 ""。
+func (m tuiModel) buildCompletionHint() string {
+	raw := m.input.Value()
+	if !strings.HasPrefix(raw, "/") || m.skillsIndex == nil {
+		return ""
+	}
+	prefix := strings.TrimPrefix(strings.SplitN(raw, " ", 2)[0], "/")
+
+	// 正在补全循环中：展示已缓存列表；否则实时计算匹配
+	var names []string
+	if m.typedPrefix != "" && len(m.completions) > 0 {
+		names = m.completions
+	} else {
+		for _, n := range m.skillsIndex.Names() {
+			if strings.HasPrefix(n, prefix) {
+				names = append(names, n)
+			}
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+
+	parts := make([]string, len(names))
+	for i, n := range names {
+		if m.typedPrefix != "" && i == m.completionIdx {
+			parts[i] = skillStyle.Render("/" + n) // 当前选中项高亮
+		} else {
+			parts[i] = dimStyle.Render("/" + n)
+		}
+	}
+	return "  ↹  " + strings.Join(parts, "   ")
+}
+
+// flushPendingReply 将 pendingReply 用 glamour 渲染并替换 lines 中的原始文本。
+func (m tuiModel) flushPendingReply() tuiModel {
+	if m.pendingReply == "" {
+		return m
+	}
+	if m.pendingReplyStart > len(m.lines) {
+		m.pendingReplyStart = len(m.lines)
+	}
+	rendered := renderMD(m.pendingReply, m.width)
+	lines := splitLines(rendered)
+	m.lines = append(m.lines[:m.pendingReplyStart], lines...)
+	m.pendingReply = ""
+	m.pendingReplyStart = len(m.lines)
+	return m
+}
+
+// renderMD 通过 glamour 将 Markdown 文本渲染为终端 ANSI 格式。
+// 降级策略：任何错误均原样返回原文。
+//
+// 故意不使用 glamour.WithAutoStyle()：该选项会发送 OSC 11 终端颜色查询，
+// 终端将响应写回 stdin，Bubbletea 的 textinput 会将其误判为用户输入，
+// 导致输入框出现乱码（如 ]11;rgb:.../[35;1R）。改用固定 "dark" 样式规避此问题。
+func renderMD(text string, width int) string {
+	if width <= 4 {
+		width = 80
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(width-4),
+	)
+	if err != nil {
+		return text
+	}
+	out, err := r.Render(text)
+	if err != nil {
+		return text
+	}
+	return strings.TrimRight(out, "\n")
+}
+
+// splitLines 按换行符分割，去除末尾空行后返回切片。
+func splitLines(s string) []string {
+	s = strings.TrimRight(s, "\n")
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "\n")
+}
+
 // View 实现 tea.Model——渲染完整 TUI 帧。
 func (m tuiModel) View() string {
 	if m.width == 0 {
 		return ""
-	}
-
-	const reservedLines = 3 // header + statusbar + input
-	scrollH := m.height - reservedLines
-	if scrollH < 1 {
-		scrollH = 1
 	}
 
 	// Header：logo + 模型名 + workdir
@@ -263,18 +495,49 @@ func (m tuiModel) View() string {
 		fmt.Sprintf("⬡ harness9   %s · %s", m.modelName, m.workDir),
 	)
 
-	// Scrollback：展示最后 scrollH 行，不足时上方填充空行
+	scrollH := m.scrollHeight()
+
+	// Scrollback：根据 viewTop 决定展示哪段内容
 	var scrollLines []string
-	if len(m.lines) >= scrollH {
-		scrollLines = m.lines[len(m.lines)-scrollH:]
+	if m.viewTop < 0 || len(m.lines) <= scrollH {
+		// 自动跟随底部
+		if len(m.lines) >= scrollH {
+			scrollLines = m.lines[len(m.lines)-scrollH:]
+		} else {
+			pad := make([]string, scrollH-len(m.lines))
+			scrollLines = append(pad, m.lines...)
+		}
 	} else {
-		pad := make([]string, scrollH-len(m.lines))
-		scrollLines = append(pad, m.lines...)
+		// 手动滚动：从 viewTop 开始展示
+		start := m.viewTop
+		end := start + scrollH
+		if end > len(m.lines) {
+			end = len(m.lines)
+		}
+		scrollLines = m.lines[start:end]
+		if len(scrollLines) < scrollH {
+			pad := make([]string, scrollH-len(scrollLines))
+			scrollLines = append(pad, scrollLines...)
+		}
 	}
 	scrollContent := strings.Join(scrollLines, "\n")
 
-	// Status Bar（1 行）
-	statusBar := statusBarStyle.Width(m.width).Render(m.statusLine)
+	// Status Bar（1 行）：运行时显示工具进度；手动滚动时显示位置；idle 显示补全提示
+	var statusContent string
+	switch {
+	case m.running:
+		statusContent = m.statusLine
+	case m.viewTop >= 0:
+		maxTop := len(m.lines) - scrollH
+		if maxTop < 1 {
+			maxTop = 1
+		}
+		pct := m.viewTop * 100 / maxTop
+		statusContent = dimStyle.Render(fmt.Sprintf("  ↑ PgUp/PgDn 滚动  ·  End 回到底部  (%d%%)", pct))
+	default:
+		statusContent = m.completionHint
+	}
+	statusBar := statusBarStyle.Width(m.width).Render(statusContent)
 
 	// Input（1 行）
 	inputLine := "› " + m.input.View()
@@ -285,8 +548,13 @@ func (m tuiModel) View() string {
 // RunTUI 以 AltScreen 模式启动 Bubbletea 程序。
 // 用户按 Ctrl-C/Ctrl-D（空闲时）退出后返回。
 func RunTUI(ctx context.Context, eng *engine.AgentEngine, idx *skills.Index, workDir, modelName string) error {
+	// TUI 独占终端，将内部日志重定向到静默，避免污染 AltScreen 输出。
+	// 退出后恢复原 Writer，避免影响同进程其他逻辑（如测试框架）。
+	origWriter := log.Writer()
+	log.SetOutput(io.Discard)
+	defer log.SetOutput(origWriter)
 	m := newTUIModel(eng, idx, ctx, workDir, modelName)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
 }
