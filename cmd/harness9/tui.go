@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -9,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/harness9/internal/engine"
+	"github.com/harness9/internal/schema"
 	"github.com/harness9/internal/skills"
 )
 
@@ -73,6 +77,7 @@ type tuiModel struct {
 
 	// 当前工具跟踪（用于耗时展示）
 	currentTool string
+	toolStart   time.Time
 
 	// 运行时
 	eng         *engine.AgentEngine
@@ -108,9 +113,129 @@ func (m tuiModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-// Update 实现 tea.Model——处理所有消息（Task 3 & 4 完成实现）。
+// Update 实现 tea.Model——处理所有消息。
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
+
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyCtrlD:
+			if m.running {
+				m.cancelFn()
+				return m, nil
+			}
+			return m, tea.Quit
+		case tea.KeyEnter:
+			if m.running {
+				return m, nil
+			}
+			raw := strings.TrimSpace(m.input.Value())
+			if raw == "" {
+				return m, nil
+			}
+			m.input.Reset()
+			prompt, ok := resolvePrompt(raw, m.skillsIndex)
+			if !ok {
+				return m, nil
+			}
+			m.lines = append(m.lines,
+				userMsgStyle.Render("▶ You: ")+raw,
+				assistantStyle.Render("◆ harness9:"),
+				"",
+			)
+			ctx, cancel := context.WithCancel(context.Background())
+			m.cancelFn = cancel
+			m.running = true
+			m.input.Blur()
+			ch, err := m.eng.RunStream(ctx, prompt)
+			if err != nil {
+				m.lines = append(m.lines, errorStyle.Render("❌ "+err.Error()))
+				m.running = false
+				cancel()
+				m.input.Focus()
+				return m, textinput.Blink
+			}
+			m.eventCh = ch
+			return m, readNextEvent(ch)
+		}
+
+	case eventMsg:
+		return m.handleEvent(engine.Event(msg))
+
+	case spinner.TickMsg:
+		if m.running && m.currentTool != "" {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			elapsed := time.Since(m.toolStart).Round(time.Millisecond)
+			m.statusLine = fmt.Sprintf("%s %s  [%s]", m.spinner.View(), m.currentTool, elapsed)
+			return m, cmd
+		}
+		return m, nil
+	}
+
+	if !m.running {
+		var cmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
+		return m, cmd
+	}
 	return m, nil
+}
+
+// handleEvent 处理单个 engine.Event，返回更新后的模型和下一个 tea.Cmd。
+func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
+	switch evt.Type {
+	case engine.EventActionDelta:
+		delta, _ := evt.Data.(string)
+		if len(m.lines) == 0 {
+			m.lines = append(m.lines, "")
+		}
+		m.lines[len(m.lines)-1] += delta
+		return m, readNextEvent(m.eventCh)
+
+	case engine.EventToolStart:
+		tc, _ := evt.Data.(schema.ToolCall)
+		m.currentTool = tc.Name
+		m.toolStart = time.Now()
+		m.statusLine = fmt.Sprintf("  %s...", tc.Name)
+		return m, tea.Batch(readNextEvent(m.eventCh), tea.Cmd(m.spinner.Tick))
+
+	case engine.EventToolResult:
+		result, _ := evt.Data.(schema.ToolResult)
+		elapsed := time.Since(m.toolStart).Round(time.Millisecond)
+		mark := "✓"
+		if result.IsError {
+			mark = "✗"
+		}
+		line := dimStyle.Render(fmt.Sprintf("  %s %s — %s", mark, m.currentTool, elapsed))
+		m.lines = append(m.lines, line)
+		m.currentTool = ""
+		m.statusLine = ""
+		return m, readNextEvent(m.eventCh)
+
+	case engine.EventDone:
+		m.running = false
+		m.currentTool = ""
+		m.statusLine = ""
+		if len(m.lines) > 0 && m.lines[len(m.lines)-1] == "" {
+			m.lines[len(m.lines)-1] = dimStyle.Render("✅ 任务完成")
+		}
+		m.input.Focus()
+		return m, textinput.Blink
+
+	case engine.EventError:
+		errMsg, _ := evt.Data.(string)
+		m.running = false
+		m.currentTool = ""
+		m.statusLine = errorStyle.Render("❌ " + errMsg)
+		m.input.Focus()
+		return m, textinput.Blink
+	}
+
+	return m, readNextEvent(m.eventCh)
 }
 
 // View 实现 tea.Model——渲染完整 TUI 帧（Task 5 完成实现）。
