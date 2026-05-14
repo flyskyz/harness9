@@ -47,9 +47,43 @@
 
 ## 核心特性
 
-### 交互式 CLI（默认模式）
+### 全屏 TUI（交互式终端默认模式）
 
-直接在终端与 Agent 对话，无需配置飞书：
+在交互式终端中直接运行，自动进入全屏 TUI 模式：
+
+```
+$ go run ./cmd/harness9
+```
+
+```
+┌─────────────────────────────────────────────┐
+│ ⬡ harness9   gpt-4o-mini · ~/myproject     │
+├─────────────────────────────────────────────┤
+│                                             │
+│  ▶ You: 帮我分析 main.go 里的 bug           │
+│                                             │
+│  ◆ harness9:                               │
+│    好的，我先读取文件...                    │
+│    ✓ read_file(main.go) — 234ms            │
+│    发现第 42 行存在空指针解引用问题         │
+│                                             │
+├─────────────────────────────────────────────┤
+│  ⠼ bash(go test ./...)  [3.2s]             │
+├─────────────────────────────────────────────┤
+│  › _                                        │
+└─────────────────────────────────────────────┘
+```
+
+- 流式输出逐 token 追加，实时显示推理过程
+- 工具执行期间 spinner 动画 + 耗时计数
+- Ctrl-C 中断正在运行的 Agent，再按一次退出 TUI
+- 通过管道或 CI 调用时自动退回 CLI REPL 模式
+
+详见 [TUI 交互界面实现原理](docs/核心功能/tui.md)。
+
+### 交互式 CLI（管道 / CI 模式）
+
+非 TTY 环境（管道、脚本、CI）自动退回 CLI REPL：
 
 ```
 $ go run ./cmd/harness9
@@ -167,7 +201,7 @@ ToolResult{ToolCallID: id, Output: "command not found: foo", IsError: true}
 - Go 1.25+
 - OpenAI 或兼容 API Key（OpenRouter、Azure 等）
 
-### 安装 & 启动 CLI
+### 安装 & 启动
 
 ```bash
 # 克隆项目
@@ -178,7 +212,7 @@ cd harness9
 cp .env.example .env
 # 编辑 .env，至少填入 OPENAI_API_KEY
 
-# 启动 CLI（默认模式，无需飞书配置）
+# 启动（交互式终端自动进入 TUI，无需飞书配置）
 go run ./cmd/harness9
 ```
 
@@ -300,6 +334,7 @@ func main() {
 
 | 模块 | 说明 | 状态 |
 |------|------|:----:|
+| **TUI** | 全屏 TUI（Bubbletea）：流式输出 + spinner + 单行输入，TTY 自动检测 | ✅ |
 | **Engine** | 标准 ReAct 主循环，阻塞 + 流式双模式 | ✅ |
 | **Context** | System Prompt 结构化组装（基础 + AGENTS.md + Skills 索引） | ✅ |
 | **Skills** | Skills 解析、索引、按需加载（`use_skill` 工具） | ✅ |
@@ -318,7 +353,9 @@ func main() {
 harness9/
 ├── cmd/
 │   └── harness9/
-│       ├── main.go                  # 程序入口：CLI（默认）或飞书 Bot（--feishu）
+│       ├── main.go                  # 程序入口：TUI（TTY）/ CLI（管道）/ 飞书 Bot（--feishu）
+│       ├── tui.go                   # 全屏 TUI 实现（Bubbletea Elm Architecture）
+│       ├── tui_test.go              # TUI Update 逻辑单元测试（37 个用例）
 │       ├── cli.go                   # 交互式 CLI REPL 实现
 │       ├── bot.go                   # Bot 编排层（IMChannel × AgentEngine，事件流映射）
 │       └── bot_test.go              # Bot 事件映射单元测试
@@ -371,6 +408,7 @@ harness9/
 │   └── 核心功能/
 │       ├── cli.md                   # CLI 使用指南（本文档）
 │       ├── agent-skills.md          # Agent Skills 设计原理
+│       ├── tui.md                   # TUI 交互界面实现原理
 │       ├── agent-loop.md            # Agent Loop 核心实现原理
 │       ├── tool-calling.md          # Tool Calling 工具调用系统详解
 │       └── im-channel.md            # IM 渠道接入详解（飞书 Bot 实现原理）
@@ -394,6 +432,7 @@ harness9/
 
 | 文档 | 内容 |
 |------|------|
+| [TUI 交互界面实现原理](docs/核心功能/tui.md) | Bubbletea 架构、布局、事件流、键盘交互、Context 传播 |
 | [CLI 使用指南](docs/核心功能/cli.md) | 启动、环境变量、AGENTS.md、Skills 配置、常见问题 |
 | [Agent Skills 设计原理](docs/核心功能/agent-skills.md) | Progressive Disclosure、frontmatter 规范、use_skill 工具 |
 | [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md) | 标准 ReAct 设计原理、PromptBuilder、流式架构 |

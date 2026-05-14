@@ -25,6 +25,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/charmbracelet/x/term"
+
 	harctx "github.com/harness9/internal/context"
 	"github.com/harness9/internal/engine"
 	"github.com/harness9/internal/env"
@@ -102,6 +104,11 @@ func main() {
 		srv := NewServer(ch, eng)
 		if err := srv.Start(ctx); err != nil {
 			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("Server 退出: %v", err)))
+		}
+	} else if term.IsTerminal(os.Stdin.Fd()) {
+		log.Print(logfmt.FormatMsg("main", fmt.Sprintf("harness9 TUI 启动 │ workDir=%s", workDir)))
+		if err := RunTUI(ctx, eng, skillsIndex, workDir, modelName); err != nil {
+			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("TUI 退出: %v", err)))
 		}
 	} else {
 		log.Print(logfmt.FormatMsg("main", fmt.Sprintf("harness9 CLI 启动 │ workDir=%s", workDir)))

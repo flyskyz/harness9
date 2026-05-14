@@ -45,10 +45,15 @@ func (idx *Index) GetFullContent(name string) (string, error) {
 	return "", fmt.Errorf("skill %q 不存在，可用技能: %s", name, idx.availableNames())
 }
 
-func (idx *Index) availableNames() string {
+// Names 返回所有已加载技能的名称列表，供 TUI Tab 补全使用。
+func (idx *Index) Names() []string {
 	names := make([]string, len(idx.skills))
 	for i, s := range idx.skills {
 		names[i] = s.Name
 	}
-	return strings.Join(names, ", ")
+	return names
+}
+
+func (idx *Index) availableNames() string {
+	return strings.Join(idx.Names(), ", ")
 }
