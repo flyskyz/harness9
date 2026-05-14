@@ -155,3 +155,69 @@ func TestEventError_SetsStatusLineAndResetsRunning(t *testing.T) {
 		t.Errorf("currentTool should be cleared, got %q", m.currentTool)
 	}
 }
+
+func TestWindowSizeMsg_UpdatesDimensions(t *testing.T) {
+	m := newTestModel()
+
+	m = applyUpdate(m, tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	if m.width != 120 || m.height != 40 {
+		t.Errorf("got %dx%d, want 120x40", m.width, m.height)
+	}
+}
+
+func TestKeyCtrlC_WhenIdle_ReturnsQuitCmd(t *testing.T) {
+	m := newTestModel()
+	m.running = false
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatal("expected a non-nil quit command")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", msg)
+	}
+}
+
+func TestKeyCtrlC_WhenRunning_CallsCancelFn(t *testing.T) {
+	m := newTestModel()
+	m.running = true
+	var cancelled bool
+	m.cancelFn = func() { cancelled = true }
+
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyCtrlC})
+
+	if !cancelled {
+		t.Error("cancelFn should be called when Ctrl-C during agent run")
+	}
+	if !m.running {
+		// running stays true until EventDone/EventError arrives from engine
+		t.Error("running should remain true until engine confirms cancellation")
+	}
+}
+
+func TestKeyEnter_EmptyInput_Ignored(t *testing.T) {
+	m := newTestModel()
+	m.running = false
+	initialLines := len(m.lines)
+
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if len(m.lines) != initialLines {
+		t.Error("empty Enter should not append to scrollback")
+	}
+}
+
+func TestKeyEnter_WhenRunning_Ignored(t *testing.T) {
+	m := newTestModel()
+	m.running = true
+	m.input.SetValue("do something")
+	initialLines := len(m.lines)
+
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if len(m.lines) != initialLines {
+		t.Error("Enter while agent is running should be ignored")
+	}
+}
