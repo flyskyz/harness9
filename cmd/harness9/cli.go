@@ -5,20 +5,24 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 
 	"github.com/harness9/internal/engine"
+	"github.com/harness9/internal/logfmt"
+	"github.com/harness9/internal/skills"
 )
 
 // RunCLI 启动交互式 REPL，从 os.Stdin 读取用户输入。
+// idx 不为 nil 时，支持 /skill-name 斜杠命令直接加载技能正文。
 // 直到 ctx 取消、用户输入 exit/quit 或 EOF 时返回。
-func RunCLI(ctx context.Context, eng *engine.AgentEngine) {
-	runCLI(ctx, eng, os.Stdin)
+func RunCLI(ctx context.Context, eng *engine.AgentEngine, idx *skills.Index) {
+	runCLI(ctx, eng, os.Stdin, idx)
 }
 
 // runCLI 是 RunCLI 的可测试内核，允许注入任意 io.Reader 作为输入源。
-func runCLI(ctx context.Context, eng *engine.AgentEngine, in io.Reader) {
+func runCLI(ctx context.Context, eng *engine.AgentEngine, in io.Reader, idx *skills.Index) {
 	fmt.Println("harness9 │ 输入 \"exit\" 或按 Ctrl-C 退出")
 	fmt.Println()
 
@@ -48,7 +52,12 @@ func runCLI(ctx context.Context, eng *engine.AgentEngine, in io.Reader) {
 			return
 		}
 
-		if err := eng.Run(ctx, input); err != nil {
+		prompt, ok := resolvePrompt(input, idx)
+		if !ok {
+			continue
+		}
+
+		if err := eng.Run(ctx, prompt); err != nil {
 			if ctx.Err() != nil {
 				fmt.Println("\n再见！")
 				return
@@ -56,4 +65,30 @@ func runCLI(ctx context.Context, eng *engine.AgentEngine, in io.Reader) {
 			fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		}
 	}
+}
+
+// resolvePrompt 处理斜杠命令和普通输入，返回最终传给 LLM 的 prompt。
+// 返回 false 表示本次输入已处理完毕（如斜杠命令找不到技能），不需要调用 LLM。
+func resolvePrompt(input string, idx *skills.Index) (prompt string, ok bool) {
+	if !strings.HasPrefix(input, "/") || idx == nil {
+		return input, true
+	}
+
+	// 分割 "/skill-name [可选附加文本]"
+	rest := strings.TrimPrefix(input, "/")
+	name, extra, _ := strings.Cut(rest, " ")
+	extra = strings.TrimSpace(extra)
+
+	body, err := idx.GetFullContent(name)
+	if err != nil {
+		log.Print(logfmt.FormatMsg("skills", fmt.Sprintf("激活失败: %v", err)))
+		return "", false
+	}
+
+	log.Print(logfmt.FormatMsg("skills", fmt.Sprintf("激活技能: %s (斜杠命令)", name)))
+
+	if extra == "" {
+		return body, true
+	}
+	return body + "\n\n" + extra, true
 }

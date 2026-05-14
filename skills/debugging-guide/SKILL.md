@@ -99,8 +99,18 @@ for _, def := range registry.GetAvailableTools() {
 
 检查：
 1. `skills/` 目录是否在 `WORK_DIR` 下（而非项目根目录的其他位置）
-2. Skill 文件是否有 `name` 和 `description` frontmatter 字段
-3. 启动日志中是否有 `warn` 输出
+2. 每个 Skill 是否在独立子目录中，且子目录内有 `SKILL.md` 文件
+3. `SKILL.md` 是否包含 `name` 和 `description` frontmatter 字段
+4. 启动日志中是否有 `[skills]` warn 输出
+
+正确的目录结构示例：
+```
+skills/
+├── go-coding-standards/
+│   └── SKILL.md      ← 必须是这个文件名
+└── debugging-guide/
+    └── SKILL.md
+```
 
 ## go vet 常见 warning
 
