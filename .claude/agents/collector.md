@@ -69,6 +69,9 @@ model: sonnet
 1. 并行采集（使用 WebFetch）：
    ├─ GitHub Trending → 解析仓库列表，提取 star 数
    ├─ Hacker News → 解析首页帖子列表，提取 points
+   │    URL 提取策略：优先使用帖子正文中链接的**原始项目 URL**（如 GitHub 仓库页）；
+   │    若帖子外部链接为组织/用户首页而非具体项目，则尝试从帖子标题或评论中推断具体仓库 URL；
+   │    确实无法确认具体项目地址时，退回使用组织首页 URL，不编造。
    ├─ Anthropic Engineering → 解析页面，提取文章标题/链接/发布日期
    │    └─ 日期格式示例: "Apr 08, 2026" → 解析为日期后过滤
    ├─ LangChain Blog (RSS) → 获取 RSS feed，提取 URL + pubDate

@@ -1,0 +1,202 @@
+[
+  {
+    "title": "obra/superpowers",
+    "url": "https://github.com/obra/superpowers",
+    "source": "github_trending",
+    "popularity": 190078,
+    "summary": "Superpowers 是一个 Agentic Skills 框架与软件开发方法论，提供经过实战验证的 AI 编程工作流方式。总星数超过 19 万，今日新增 1401 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "总 star 数超 19 万，是目前 Agentic Skills 领域最具影响力的开源项目之一",
+      "提供经实战验证的 AI 编程工作流框架，涵盖完整的 Agent 开发方法论",
+      "今日仍新增 1401 颗星，说明社区对 Agentic Skills 方向的持续高度关注",
+      "作为方法论框架，可直接指导工程团队将 AI 能力落地为可复用的工作流"
+    ],
+    "importance_score": 8,
+    "importance_label": "🔧 直接有帮助",
+    "suggested_tags": ["Agentic-Skills", "AI编程", "工作流", "方法论", "开源框架"],
+    "deep_summary": "obra/superpowers 是一个围绕 Agentic Skills 构建的软件开发方法论框架，以超 19 万 star 的规模成为该领域标杆项目。它通过提炼真实工程实践，形成可复用的 AI 编程工作流模式，帮助开发者将 AI 辅助编程能力系统化。今日仍保持每日千星以上的增速，反映出社区对 Agent Skills 工程化方向的持续热情。对于正在构建 AI 编程助手基础设施的团队，该项目的方法论具有直接的参考价值。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  },
+  {
+    "title": "rasbt/LLMs-from-scratch",
+    "url": "https://github.com/rasbt/LLMs-from-scratch",
+    "source": "github_trending",
+    "popularity": 94625,
+    "summary": "从零开始用 PyTorch 实现类 ChatGPT 大型语言模型的完整教程项目，逐步讲解 LLM 的核心原理与代码实现，是 LLM 学习领域的标杆资源。今日新增 821 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "以近 10 万 star 成为 LLM 学习领域最受欢迎的开源教程项目",
+      "系统覆盖 LLM 从注意力机制到预训练、微调的完整实现链路",
+      "基于 PyTorch 实现，代码可直接运行，适合工程师从原理层理解大模型",
+      "持续高热度（今日 821 星）说明其作为学习资源的长期价值"
+    ],
+    "importance_score": 7,
+    "importance_label": "🔧 直接有帮助",
+    "suggested_tags": ["LLM", "PyTorch", "深度学习", "教程", "大模型原理"],
+    "deep_summary": "rasbt/LLMs-from-scratch 是一个以 PyTorch 从零实现类 ChatGPT 模型的完整教程项目，积累近 10 万 star，长期占据 LLM 学习资源排行榜首位。该项目逐步讲解 Transformer 架构、注意力机制、预训练与微调等核心环节，将抽象的理论转化为可运行代码。对于希望深入理解大模型工作原理的工程师，这是目前最系统、最易上手的实践资源之一。今日依然新增 821 星，体现了持续的社区需求。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  },
+  {
+    "title": "mattpocock/skills",
+    "url": "https://github.com/mattpocock/skills",
+    "source": "github_trending",
+    "popularity": 79917,
+    "summary": "面向真实工程师的 Agent Skills 集合，直接来自作者的 .claude 目录，为 Claude Code 等 AI 编程助手提供可复用的技能框架。今日新增 3392 颗星，是当日 GitHub 增速最快的 AI 相关仓库。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "今日新增 3392 颗星，是当日 GitHub 增速最快的 AI 相关仓库",
+      "直接源自作者真实 .claude 目录，所有 Skills 均经过实际工程项目验证",
+      "专门面向 Claude Code 等 AI 编程助手，与主流 AI 开发工具深度集成",
+      "提供可直接复用的 Agent Skills 框架，降低工程师使用 AI 辅助开发的门槛",
+      "近 8 万 star 的高热度表明 Agent Skills 工程化已成为开发者社区焦点话题"
+    ],
+    "importance_score": 9,
+    "importance_label": "⭐ 改变格局",
+    "suggested_tags": ["Agent-Skills", "Claude-Code", "AI编程助手", "工程实践", "可复用框架"],
+    "deep_summary": "mattpocock/skills 是当前最具影响力的 Agent Skills 开源集合，以今日新增 3392 颗星的速度成为 GitHub 全站增速最快的 AI 仓库。该项目直接来源于作者在真实工程项目中积累的 Claude 配置文件，提供面向 Claude Code 等 AI 编程助手的可复用技能框架，填补了 AI 辅助开发工具链标准化的空白。它的快速流行标志着 Agent Skills 工程化已从个人实践上升为社区共识，对正在构建 AI 编辑器工作流的团队具有直接参考价值。该项目的模式也可能催生更多类似的 Skills 生态建设。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  },
+  {
+    "title": "danielmiessler/Personal_AI_Infrastructure",
+    "url": "https://github.com/danielmiessler/Personal_AI_Infrastructure",
+    "source": "github_trending",
+    "popularity": 13540,
+    "summary": "个人 AI 基础设施项目，提供完整的 Agentic AI 基础设施方案以放大人类能力，涵盖工具链编排、上下文管理等核心 Agent 组件。今日新增 435 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "提供完整的个人 Agentic AI 基础设施方案，覆盖工具链编排与上下文管理",
+      "以「放大人类能力」为核心设计理念，聚焦个人生产力场景",
+      "超 1.3 万 star，在个人 AI 基础设施领域具有较高影响力",
+      "涵盖核心 Agent 组件设计，对构建私有 Agent 系统有参考价值"
+    ],
+    "importance_score": 6,
+    "importance_label": "📖 值得了解",
+    "suggested_tags": ["个人AI基础设施", "Agent编排", "上下文管理", "生产力工具"],
+    "deep_summary": "danielmiessler/Personal_AI_Infrastructure 是一个面向个人的完整 Agentic AI 基础设施方案，以放大人类能力为核心目标，系统梳理了工具链编排、上下文管理等 Agent 核心组件的配置方式。项目积累超 1.3 万 star，在个人 AI 工具链领域具有一定影响力。对于希望自建私有 AI 基础设施的开发者和研究者，该项目提供了较为完整的参考架构。今日新增 435 星，热度稳定。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  },
+  {
+    "title": "trycua/cua",
+    "url": "https://github.com/trycua/cua",
+    "source": "github_trending",
+    "popularity": 16649,
+    "summary": "CUA 是面向计算机使用 Agent (Computer-Use Agent) 的开源基础设施，提供沙箱、SDK 和基准测试，支持在 macOS、Linux、Windows 全桌面环境中训练和评测 AI Agent。今日新增 245 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "专为 Computer-Use Agent 设计，覆盖 macOS、Linux、Windows 全平台桌面环境",
+      "提供沙箱、SDK 和基准测试三位一体的完整 CUA 开发基础设施",
+      "超 1.6 万 star，是 Computer-Use Agent 领域的主流开源基础设施项目",
+      "内置基准测试支持，便于量化评估 Agent 在真实桌面任务中的表现"
+    ],
+    "importance_score": 7,
+    "importance_label": "🔧 直接有帮助",
+    "suggested_tags": ["Computer-Use-Agent", "桌面自动化", "AI沙箱", "基准测试", "跨平台"],
+    "deep_summary": "trycua/cua 是专为 Computer-Use Agent 构建的开源基础设施项目，提供了沙箱隔离、开发 SDK 和标准化基准测试三大核心能力，支持在 macOS、Linux、Windows 三大桌面平台上训练和评测 AI Agent。项目积累超 1.6 万 star，是目前 CUA 领域最完善的开源基础设施之一。随着各大 AI 厂商加速推进计算机使用能力，标准化的训练和评测基础设施的需求正在快速增长，该项目的价值也将随之提升。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  },
+  {
+    "title": "yikart/AiToEarn",
+    "url": "https://github.com/yikart/AiToEarn",
+    "source": "github_trending",
+    "popularity": 13310,
+    "summary": "AiToEarn 是一个利用 AI 能力实现收益变现的 TypeScript 平台工具，汇聚了多种 AI 商业化应用场景。今日新增 981 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "聚焦 AI 商业化变现场景，填补工具侧空白",
+      "基于 TypeScript 构建，生态集成友好",
+      "今日新增 981 颗星，用户对 AI 变现工具的需求旺盛"
+    ],
+    "importance_score": 4,
+    "importance_label": "👀 可略过",
+    "suggested_tags": ["AI变现", "TypeScript", "商业化", "AI工具"],
+    "deep_summary": "AiToEarn 是一个以 TypeScript 构建的 AI 商业化工具平台，聚焦将 AI 能力转化为收益的各类应用场景。项目今日新增近千星，反映出开发者对 AI 变现工具的浓厚兴趣。然而当前摘要中技术细节较少，具体支持的变现模式和技术深度尚不明确，技术价值有待进一步评估。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  },
+  {
+    "title": "millionco/react-doctor",
+    "url": "https://github.com/millionco/react-doctor",
+    "source": "github_trending",
+    "popularity": 9417,
+    "summary": "React Doctor 是一个专门检测 AI Agent 生成的低质量 React 代码的工具，通过静态分析与规则引擎识别 AI 编写代码中的常见问题，提升 AI 辅助开发的代码质量。今日新增 604 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "专门针对 AI 生成 React 代码的质量问题，填补 AI 辅助开发的质量保障空白",
+      "结合静态分析与规则引擎，识别 AI 编写代码的特有缺陷模式",
+      "今日新增 604 颗星，说明 AI 代码质量问题已引发广泛开发者共鸣",
+      "可集成到 CI/CD 流程，为 AI 辅助开发提供自动化质量门禁"
+    ],
+    "importance_score": 7,
+    "importance_label": "🔧 直接有帮助",
+    "suggested_tags": ["AI代码质量", "React", "静态分析", "AI辅助开发", "工具链"],
+    "deep_summary": "React Doctor 是专为 AI Agent 生成代码场景设计的静态分析工具，通过规则引擎识别 AI 编写 React 代码中的典型质量问题，如冗余渲染、错误的 Hook 使用、状态管理反模式等。随着 AI 辅助编程的普及，AI 生成代码的质量问题日益突出，该工具填补了 AI 代码质量保障的关键缺口。今日新增 604 星，并积累近万 star，表明该问题已获得开发者社区的广泛认可。对于在生产项目中大量使用 AI 生成 React 代码的团队，该工具具有直接的实用价值。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  },
+  {
+    "title": "rohitg00/agentmemory",
+    "url": "https://github.com/rohitg00/agentmemory",
+    "source": "github_trending",
+    "popularity": 8231,
+    "summary": "基于真实基准测试排名第一的 AI 编程 Agent 持久化记忆方案，使用 TypeScript 构建，解决 AI Agent 跨会话上下文保持问题。今日新增 1379 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "在真实基准测试中排名第一，持久化记忆能力经过量化验证",
+      "专注解决 AI Agent 跨会话上下文保持这一核心痛点",
+      "TypeScript 实现，易于集成进现有 Web/Node.js Agent 工作流",
+      "今日新增 1379 颗星，热度仅次于 mattpocock/skills"
+    ],
+    "importance_score": 8,
+    "importance_label": "🔧 直接有帮助",
+    "suggested_tags": ["Agent记忆", "持久化上下文", "TypeScript", "跨会话", "基准测试"],
+    "deep_summary": "agentmemory 是一个专为 AI 编程 Agent 设计的持久化记忆方案，在真实基准测试中获得第一名，以量化成绩证明了其在跨会话上下文保持方面的优越性。项目使用 TypeScript 构建，专注解决 AI Agent 在多轮交互中丢失上下文这一核心痛点。今日新增 1379 颗星，是当日增速第二快的项目，表明 Agent 持久化记忆问题已成为开发者社区最迫切的需求之一。对于正在构建需要跨会话记忆能力的 Agent 系统（如 harness9）的团队，该项目值得深入研究。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  },
+  {
+    "title": "tinyhumansai/openhuman",
+    "url": "https://github.com/tinyhumansai/openhuman",
+    "source": "github_trending",
+    "popularity": 6471,
+    "summary": "OpenHuman 是一款注重隐私、简洁强大的个人 AI 超级智能框架，使用 Rust 构建，主打私有化部署与极致性能。今日新增 1696 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "Rust 构建，在性能和内存安全方面具有先天优势",
+      "主打隐私优先与私有化部署，满足数据敏感场景需求",
+      "今日新增 1696 颗星，热度居 GitHub 当日第三",
+      "「个人 AI 超级智能」定位独特，面向个人用户的 AI 能力聚合"
+    ],
+    "importance_score": 6,
+    "importance_label": "📖 值得了解",
+    "suggested_tags": ["Rust", "隐私优先", "私有化部署", "个人AI", "超级智能"],
+    "deep_summary": "OpenHuman 是一个用 Rust 构建的个人 AI 超级智能框架，以隐私保护和私有化部署为核心差异化卖点，面向不希望数据上云的个人用户提供强大的本地 AI 能力。今日新增 1696 颗星，增速较快，但项目仍较年轻（总 star 约 6400），技术成熟度和具体能力边界需进一步观察。Rust 技术栈的选择体现了对性能极致追求的方向，在 AI 推理加速领域具有潜力。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  },
+  {
+    "title": "supertone-inc/supertonic",
+    "url": "https://github.com/supertone-inc/supertonic",
+    "source": "github_trending",
+    "popularity": 4714,
+    "summary": "Supertonic 是闪电级快速、设备端运行的多语言 TTS 引擎，通过 ONNX 原生运行，支持离线 AI 语音合成。今日新增 859 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "基于 ONNX 原生运行，实现设备端低延迟语音合成",
+      "支持多语言，覆盖更广泛的国际化场景",
+      "完全离线运行，数据不出本地，隐私友好",
+      "今日新增 859 颗星，语音合成领域热度较高"
+    ],
+    "importance_score": 6,
+    "importance_label": "📖 值得了解",
+    "suggested_tags": ["TTS", "语音合成", "ONNX", "设备端推理", "多语言"],
+    "deep_summary": "Supertonic 是 Supertone 公司推出的设备端多语言 TTS 引擎，通过 ONNX 格式实现跨平台原生运行，在保持极低延迟的同时支持完全离线推理。对于需要在端侧集成语音合成能力的 Agent 系统或移动应用，Supertonic 提供了一个无需云服务依赖的解决方案。今日新增 859 颗星，但总 star 数约 4700，仍处于成长阶段，生产可用性有待验证。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/github_trending.json"]
+  }
+]

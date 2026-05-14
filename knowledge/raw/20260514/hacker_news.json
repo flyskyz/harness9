@@ -1,0 +1,42 @@
+[
+  {
+    "title": "Show HN: Needle: We Distilled Gemini Tool Calling into a 26M Model",
+    "url": "https://github.com/cactus-compute",
+    "source": "hacker_news",
+    "popularity": 667,
+    "summary": "Cactus Compute 团队将 Gemini 的工具调用能力蒸馏到一个仅 2600 万参数的轻量模型 Needle 中，实现了极低延迟、可本地部署的工具调用推理能力，引发社区对小模型工具调用能力的广泛讨论。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "LLMs are breaking 20 year old system design",
+    "url": "https://zknill.io",
+    "source": "hacker_news",
+    "popularity": 4,
+    "summary": "文章探讨 LLM 如何颠覆传统软件系统设计的基本假设，分析了 AI 在系统架构层面带来的范式变革，讨论了二十年来软件工程实践受到的冲击。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "A Claude Code and Codex Skill for Deliberate Skill Development",
+    "url": "https://github.com/drcathicks",
+    "source": "hacker_news",
+    "popularity": 19,
+    "summary": "介绍了一种专门为 Claude Code 和 OpenAI Codex 设计的 Agent Skill，旨在通过刻意练习方法论提升 AI 辅助开发中的技能培养效果，属于 Agent Skills 工程实践方向的探索。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "The US is winning the AI race where it matters most: commercialization",
+    "url": "https://avkcode.github.io",
+    "source": "hacker_news",
+    "popularity": 192,
+    "summary": "文章分析美国在 AI 商业化落地方面的领先优势，认为真正决定 AI 竞争格局的核心是商业变现能力而非纯技术研究，并对比了美国与其他国家在 AI 产业化方面的进展。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "Claude for Small Business",
+    "url": "https://www.anthropic.com",
+    "source": "hacker_news",
+    "popularity": 166,
+    "summary": "Anthropic 推出面向小型企业的 Claude 服务，降低了 AI 助手的使用门槛，为中小企业提供可负担的 AI 工作流自动化和智能助手能力。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  }
+]

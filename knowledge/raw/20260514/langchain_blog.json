@@ -1,0 +1,106 @@
+[
+  {
+    "title": "The Anatomy of an Agent Harness",
+    "url": "https://www.langchain.com/blog/the-anatomy-of-an-agent-harness",
+    "source": "langchain_blog",
+    "popularity": 30,
+    "summary": "文章系统定义了 Agent Harness 的概念：围绕 AI 模型的代码、配置与执行逻辑，将原始智能转化为可工作的系统。作者通过反向推导所需行为，提炼出文件系统、代码执行沙箱、记忆系统和验证循环等核心 Harness 组件，强调 Harness 工程已成为优化复杂长程 Agent 性能的关键。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "Managed Deep Agents: the fastest way to ship a production deep agent",
+    "url": "https://www.langchain.com/blog/introducing-managed-deep-agents",
+    "source": "langchain_blog",
+    "popularity": 29,
+    "summary": "LangChain 推出 Managed Deep Agents 托管运行时服务，将生产 Agent 部署的基础设施关注点（持久化执行、记忆管理、可观测性）统一由 LangSmith 平台管理，开发者只需维护 Agent 定义代码。该服务面向需要持久上下文和工具访问权限的长运行 Agent，目前处于私测阶段。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "New in Deep Agents v0.6",
+    "url": "https://www.langchain.com/blog/deep-agents-0-6",
+    "source": "langchain_blog",
+    "popularity": 29,
+    "summary": "Deep Agents v0.6 发布，引入代码解释器、Harness Profiles（支持以 20 倍以上低成本使用开源模型）、流式输出、Delta Channels（减少最多 100 倍 checkpoint 存储）以及 ContextHub 后端五大重磅特性，全面提升 Agent 性能与成本效益。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "Introducing LangSmith Context Hub",
+    "url": "https://www.langchain.com/blog/introducing-context-hub",
+    "source": "langchain_blog",
+    "popularity": 29,
+    "summary": "LangSmith Context Hub 是集中管理 Agent 上下文文件（指令、Skills、策略、示例）的新平台，支持版本管理、多环境标签和团队协作，解决非工程师人员需要快速迭代 Agent 行为的痛点，将上下文管理直接集成到 Agent 工作流中。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "LangSmith LLM Gateway: runtime governance built into the agent lifecycle",
+    "url": "https://www.langchain.com/blog/introducing-llm-gateway",
+    "source": "langchain_blog",
+    "popularity": 29,
+    "summary": "LangSmith LLM Gateway 是嵌入 Agent 生命周期的运行时治理层，通过 Agent 与 LLM 提供商之间的网关强制执行消费限额和敏感数据脱敏，与现有 LangSmith 平台无缝集成，目前处于私测阶段。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "LangSmith Sandboxes are Generally Available",
+    "url": "https://www.langchain.com/blog/langsmith-sandboxes-generally-available",
+    "source": "langchain_blog",
+    "popularity": 29,
+    "summary": "LangSmith Sandboxes 正式 GA，提供基于硬件虚拟化 microVM 的代码安全执行环境，解决容器无法防御的供应链攻击和内核漏洞问题。GA 版本新增快照、写时复制 Fork、Service URLs 和 Sandbox CLI，支持有状态长运行 Agent 工作负载。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "Introducing Langsmith Engine",
+    "url": "https://www.langchain.com/blog/introducing-langsmith-engine",
+    "source": "langchain_blog",
+    "popularity": 29,
+    "summary": "LangSmith Engine 自动化 Agent 持续改进闭环：从生产 Trace 中聚类故障、识别问题根因、自动起草代码修复 PR 并同步强化评测覆盖以防止回归。该工具已集成进 LangSmith 现有平台，只需连接项目即可从生产数据中持续发现可执行问题。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "We built SmithDB, the data layer for agent observability",
+    "url": "https://www.langchain.com/blog/introducing-smithdb",
+    "source": "langchain_blog",
+    "popularity": 29,
+    "summary": "LangChain 自研 SmithDB，一款专为 Agent 可观测性负载设计的分布式数据库，基于对象存储架构实现跨云可移植性，性能较前方案提升最高 15 倍。SmithDB 已承担 LangSmith 美国云区 100% 的数据摄入与 Trace UI 查询，支持全文搜索和复杂过滤。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "Delta Channels: How We're Evolving our Runtime for Long-Running Agents",
+    "url": "https://www.langchain.com/blog/delta-channels-evolving-agent-runtime",
+    "source": "langchain_blog",
+    "popularity": 28,
+    "summary": "LangGraph 1.2 引入 Delta Channels，将 Agent checkpoint 存储从全量快照改为增量变更记录并周期性写入完整快照，存储增长从 O(N²) 降至 O(N)，真实编程 Agent 负载下 checkpoint 体积减少 41 倍，同时保持对现有 Thread 的向后兼容。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "The Agent Development Lifecycle",
+    "url": "https://www.langchain.com/blog/the-agent-development-lifecycle",
+    "source": "langchain_blog",
+    "popularity": 25,
+    "summary": "文章提出 Agent 开发的四阶段方法论：构建、测试、部署、监控，强调成功团队需建立可重复的评测、部署和可观测性基础设施，而非将每个 Agent 视为一次性项目，同时探讨了 Agent 系统规模化时的治理挑战。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "Agent observability needs feedback to power learning",
+    "url": "https://www.langchain.com/blog/agent-observability-needs-feedback-to-power-learning",
+    "source": "langchain_blog",
+    "popularity": 21,
+    "summary": "文章指出当前 Agent 可观测性缺失反馈闭环，仅靠 Trace 无法驱动 Agent 持续学习和改进。作者呼吁将用户反馈、结果评估与 Trace 数据深度整合，构建能够让 Agent 从生产经验中不断进化的学习系统。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "Tuning Deep Agents to Work Well with Different Models",
+    "url": "https://www.langchain.com/blog/tuning-deep-agents-different-models",
+    "source": "langchain_blog",
+    "popularity": 15,
+    "summary": "LangChain 团队介绍了针对不同 LLM（包括低成本开源模型）调优 Deep Agent 行为的方法，通过 Harness Profile 机制实现跨模型的性能优化，在大幅降低成本的同时维持 Agent 任务完成质量。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "How LangSmith and LangChain OSS Help You Meet EU AI Act Requirements",
+    "url": "https://www.langchain.com/blog/langsmith-langchain-oss-eu-ai-act",
+    "source": "langchain_blog",
+    "popularity": 13,
+    "summary": "文章阐述 LangSmith 和 LangChain 开源工具如何帮助企业满足欧盟 AI 法案合规要求，涵盖可追溯性、风险管理和透明度等关键监管维度，为 AI 应用的合规部署提供实践指南。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  }
+]

@@ -566,3 +566,326 @@ skills/
 主流框架在 Agent Skills 设计上已形成高度共识：**以 `SKILL.md` 文件系统声明技能、以渐进式披露控制 token 消耗、以双触发模式兼顾灵活性与确定性**。
 
 harness9 已有 `PromptBuilder` 接口和 `WithPromptBuilder` Option，天然适合通过装饰器模式接入 Skills 能力，无需改动 engine 核心逻辑。建议以 P0 任务为起点，在 2 天内完成核心实现，后续逐步迭代热重载和按需加载等高级特性。
+
+---
+
+## 7. Skills 唤起机制深度调研
+
+> 调研日期：2026-05-14
+> 核心问题：主流框架通过 **Tool-Calling** 方式唤起 Skills，还是通过其他机制（直接注入 context、斜杠命令解析、中间件拦截等）？
+
+### 7.1 唤起机制总览
+
+| 框架 | 主要唤起机制 | 专用工具名 | 支持斜杠命令 |
+|------|------------|----------|------------|
+| DeepAgents | 借道 `read_file` Tool-Calling（无专用工具） | 无 | 无 |
+| OpenHarness | 专用 `skill` Tool-Calling + 斜杠命令 | `skill` | ✅ `/skill-name` |
+| OpenCode | 无 Skills 系统（项目已归档） | — | — |
+| OpenClaw | 借道 `read` Tool-Calling + 斜杠命令 | 无 | ✅ `/skill-name` |
+| HermesAgent | 专用 `skill_view` Tool + 斜杠命令 + CLI 预加载（三模式） | `skill_view` | ✅ `/skill-name` |
+| Claude Agent SDK | 专用 `Skill` Tool-Calling + 斜杠命令 | `Skill` | ✅ `/skill-name` |
+| OpenAI Agent SDK | 无 Skills 概念，通过 Agent Handoff 替代 | — | — |
+
+**核心结论**：有 Skills 系统的框架均使用 Tool-Calling 机制触发技能加载，而非在构建 System Prompt 时预先注入全部技能正文。这与第 3.2 节"渐进式披露"的设计目标完全一致——只有 LLM 决策"需要某技能"后，才通过 Tool-Calling 拉取正文，控制 token 消耗。
+
+---
+
+### 7.2 各框架唤起机制详解
+
+#### 7.2.1 DeepAgents（LangChain）
+
+DeepAgents **没有专用的 skill 工具**，而是将技能文件视为普通文件，借道已有的 `read_file` 工具加载：
+
+```
+System Prompt 末尾（SkillsBackend 注入）：
+  ## Available Skills
+  - code-review: Performs thorough code review with security and quality checks
+  - debug: Diagnoses runtime errors and suggests fixes
+
+  To use a skill, call read_file with path: .agents/skills/<name>/SKILL.md
+```
+
+LLM 看到 skills 目录后，自主决定通过 `read_file` 读取对应的 `SKILL.md`，框架无需额外处理——技能内容作为普通 `tool_result` 返回，注入到下一轮 LLM 上下文中。
+
+**优点**：实现极简，不需要注册额外工具。
+**缺点**：路径暴露给 LLM，LLM 可能读取非预期的 skills 文件；无法做访问控制。
+
+---
+
+#### 7.2.2 OpenHarness（HKUDS）
+
+OpenHarness 是最早引入**专用 `skill` 工具**的框架之一：
+
+```python
+# 注册到工具列表的 skill 工具定义
+{
+  "name": "skill",
+  "description": "Load and activate a skill to handle specialized tasks",
+  "parameters": {
+    "name": {
+      "type": "string",
+      "description": "The skill name to activate"
+    },
+    "args": {
+      "type": "object",
+      "description": "Optional arguments to pass to the skill"
+    }
+  }
+}
+```
+
+**调用时序**：
+```
+1. System Prompt 末尾注入技能目录（name + description）
+2. LLM 判断需要某技能 → tool_use: {name: "skill", input: {name: "web-research"}}
+3. 框架执行 skill 工具：
+   a. 加载 SKILL.md 正文
+   b. 替换 {{variable}} 模板变量
+   c. 检查 plugins 依赖是否满足
+4. 将技能正文作为 tool_result 返回给 LLM
+5. LLM 在完整技能指令下继续执行
+```
+
+`disable-model-invocation: true` 的技能不会出现在工具注册列表中，只能通过斜杠命令触发。
+
+---
+
+#### 7.2.3 OpenCode（Anomaly）
+
+**仓库状态**：经调研，`https://github.com/anomalyco/opencode` 仓库已归档（Archived），项目处于停止维护状态。现存代码库中未发现独立的 Skills 系统实现。
+
+原调研报告第 2.3 节中描述的远程 URL 拉取技能（`SkillIndex` + Effect-TS）系基于早期版本信息，当前代码库无法核实。
+
+---
+
+#### 7.2.4 OpenClaw
+
+OpenClaw 的策略与 DeepAgents 类似——**借道通用文件读取工具**，但在 System Prompt 的技能目录格式上更加精确，使用 XML 结构提示 LLM：
+
+```xml
+<available_skills>
+  <skill name="deploy-service" path=".openclaw/skills/deploy-service/SKILL.md">
+    Deploys a microservice to Kubernetes cluster. Requires: kubectl, helm.
+    allowed_agents: devops-agent, platform-agent
+  </skill>
+</available_skills>
+
+To activate a skill, use the read tool with the specified path.
+```
+
+**访问控制实现**：`allowed-agents` 字段在框架侧强制执行——即使 LLM 请求读取某 skill 文件，框架会检查当前 Agent 名称是否在白名单内，不在则拒绝并返回权限错误。
+
+斜杠命令绕过 LLM 判断，由框架直接注入技能正文。
+
+---
+
+#### 7.2.5 HermesAgent（NousResearch）
+
+HermesAgent 是三模式并存最完整的框架：
+
+**模式一：Tool-Calling（`skill_view` 工具）**
+```python
+# 专用工具定义
+{
+  "name": "skill_view",
+  "description": "View the full content of a skill to understand how to perform a specific task",
+  "parameters": {
+    "skill_name": {"type": "string"}
+  }
+}
+```
+
+**模式二：斜杠命令**
+用户输入 `/analyze-repo`，框架绕过 LLM 判断，直接加载 `analyze-repo/SKILL.md` 正文并追加到当前消息前。
+
+**模式三：CLI 预加载**
+```bash
+hermes --skill=analyze-repo "分析这个仓库的架构"
+```
+通过 `--skill` 标志在启动时直接将技能正文注入 System Prompt，适合已明确场景的自动化脚本调用，无需 LLM 判断。
+
+**热重载时序**：`skill_view` 工具每次被调用时都重新从磁盘加载，触发 content hash 比对，确保 LLM 获取到最新版本。
+
+---
+
+#### 7.2.6 Claude Agent SDK（重点）
+
+经调研 Claude 官方文档（https://docs.anthropic.com/en/docs/claude-code/skills），**`Skill` 工具是真实的 Tool-Calling 工具**，与 `bash`、`read` 等内置工具并列注册。
+
+**`Skill` 工具定义**（官方文档确认）：
+```json
+{
+  "name": "Skill",
+  "description": "Load a skill to guide how to approach a specific task",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "The name of the skill to load (matches skill directory name)"
+      }
+    },
+    "required": ["name"]
+  }
+}
+```
+
+**完整调用时序**：
+```
+1. PromptBuilder 在 System Prompt 末尾注入技能目录：
+   ## Available Skills (use the Skill tool to load one when relevant)
+   - commit: Use when committing changes after code review
+   - cr: Use when reviewing code for correctness and quality
+
+2. 用户发送消息 → LLM 判断适用技能
+
+3. LLM 发起 Tool-Calling：
+   tool_use: {
+     name: "Skill",
+     input: { name: "commit" }
+   }
+
+4. 框架执行 Skill 工具：
+   - 查找 .claude/skills/commit/SKILL.md
+   - 读取完整正文
+   - 返回 tool_result: { content: "<SKILL.md 正文>" }
+
+5. LLM 收到技能正文，按指令继续执行（可能再次调用 bash、edit 等工具）
+```
+
+**斜杠命令快捷路径**：用户输入 `/commit` 时，框架解析为直接加载 `commit` 技能正文，跳过 LLM 判断步骤，将正文作为用户消息前缀注入后再调用 LLM。
+
+**关键设计**：技能正文通过 `tool_result` 返回，而非直接修改 System Prompt。这意味着技能内容在对话历史中有明确的位置，LLM 可以清晰感知"何时激活了哪个技能"。
+
+---
+
+#### 7.2.7 OpenAI Agent SDK
+
+OpenAI Agent SDK 无独立的 Skills 概念，通过 **Agent Handoff** 实现等价语义：
+
+```
+Skills 概念映射：
+  skill "code-review" → 专门的 code-reviewer Agent
+  "激活技能"        → Runner 将任务 handoff 给对应 Agent
+  "技能正文"        → 目标 Agent 的 instructions 字段
+```
+
+从 Tool-Calling 角度看，`handoff` 本质上也是一次 Tool-Calling——LLM 调用名为 `transfer_to_code_reviewer` 的工具，框架将控制权转交给目标 Agent。因此 OpenAI 的机制与"借道 Tool-Calling"路线本质相同，只是粒度更粗（整个 Agent 而非一段指令文本）。
+
+---
+
+### 7.3 机制对比分析：Tool-Calling vs 直接注入
+
+#### 为何选择 Tool-Calling 而非预注入
+
+| 维度 | Tool-Calling 方式 | 直接注入 System Prompt |
+|------|-----------------|----------------------|
+| Token 消耗 | 按需加载，只有被激活的技能消耗 token | 全量注入，所有技能常驻 context |
+| 激活时机 | LLM 自主判断，灵活 | 固定，无法动态调整 |
+| 对话历史可追溯 | tool_use + tool_result 明确记录激活事件 | 注入时机不可见，调试困难 |
+| 多技能组合 | 可在同一 Turn 内连续激活多个技能 | 需提前知道要注入哪些技能 |
+| 实现复杂度 | 需要注册工具、处理 tool_use 事件 | 简单字符串拼接 |
+
+**结论**：Tool-Calling 方式在 token 效率、可观测性和灵活性上全面优于预注入，这是主流框架的一致选择。直接注入适合技能数量极少（1-2 个）且几乎必然被用到的场景。
+
+#### 专用工具 vs 借道通用工具
+
+| 方式 | 代表框架 | 优势 | 劣势 |
+|------|---------|------|------|
+| 专用 `skill`/`Skill` 工具 | Claude Agent SDK、OpenHarness、HermesAgent | 语义清晰；可做访问控制；LLM 不会混淆技能与文件操作 | 需注册额外工具 |
+| 借道 `read_file` / `read` | DeepAgents、OpenClaw | 实现零成本 | 路径暴露；无法区分"读文件"和"加载技能"的意图 |
+
+---
+
+### 7.4 对 harness9 的实现建议
+
+基于上述调研，建议 harness9 实现**专用 `skill` 工具**（对齐 Claude Agent SDK / OpenHarness 路线）：
+
+#### 工具定义
+
+```go
+// internal/skills/tool.go
+
+// SkillTool 是专用技能唤起工具，通过 Tool-Calling 按需加载技能正文
+type SkillTool struct {
+    registry *Registry
+}
+
+func (t *SkillTool) Name() string { return "skill" }
+
+func (t *SkillTool) Definition() schema.ToolDefinition {
+    return schema.ToolDefinition{
+        Name:        "skill",
+        Description: "Load a skill to guide how to approach a specific task. Use when the task matches a skill's description.",
+        Parameters: json.RawMessage(`{
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The skill name to load"
+                }
+            },
+            "required": ["name"]
+        }`),
+    }
+}
+
+func (t *SkillTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+    var input struct {
+        Name string `json:"name"`
+    }
+    if err := json.Unmarshal(args, &input); err != nil {
+        return "", fmt.Errorf("invalid args: %w", err)
+    }
+    skill := t.registry.Get(input.Name)
+    if skill == nil {
+        return "", fmt.Errorf("skill %q not found", input.Name)
+    }
+    return skill.Content, nil
+}
+```
+
+#### System Prompt 技能目录格式
+
+建议采用 OpenClaw 风格的 XML 结构（语义更清晰）：
+
+```go
+func (b *SkillsPromptBuilder) buildSkillCatalog() string {
+    skills := b.registry.List()
+    if len(skills) == 0 {
+        return ""
+    }
+    var sb strings.Builder
+    sb.WriteString("<available_skills>\n")
+    for _, s := range skills {
+        fmt.Fprintf(&sb, "  <skill name=%q>%s</skill>\n", s.Metadata.Name, s.Metadata.Description)
+    }
+    sb.WriteString("</available_skills>\n\n")
+    sb.WriteString("Use the `skill` tool to load a skill when the task matches its description.")
+    return sb.String()
+}
+```
+
+#### 斜杠命令快捷路径
+
+在消息处理入口检测 `/skill-name` 格式，直接注入技能正文（绕过 LLM 判断）：
+
+```go
+// 在 handleMessage 或 REPL 输入处理中
+if strings.HasPrefix(text, "/") {
+    name := strings.TrimPrefix(text, "/")
+    if skill := skillRegistry.Get(name); skill != nil {
+        // 将技能正文作为系统上下文前缀注入，而非修改用户消息
+        ctx = WithSkillContext(ctx, skill.Content)
+    }
+}
+```
+
+#### 实现优先级更新
+
+| 阶段 | 任务 | 说明 |
+|------|------|------|
+| P0 | `SkillTool` 实现 | 专用 Tool-Calling 工具，注册到 Registry |
+| P0 | XML 格式技能目录 | System Prompt 注入，使用 `<available_skills>` 结构 |
+| P1 | 斜杠命令解析 | 在 REPL 和飞书消息处理入口处理 `/skill-name` |
+| P2 | `disable_model_invocation` 字段 | 控制某技能是否出现在工具注册列表中 |

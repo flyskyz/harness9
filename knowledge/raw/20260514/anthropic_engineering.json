@@ -1,0 +1,10 @@
+[
+  {
+    "title": "An update on recent Claude Code quality reports",
+    "url": "https://www.anthropic.com/engineering/april-23-postmortem",
+    "source": "anthropic_engineering",
+    "popularity": 9,
+    "summary": "Anthropic 披露了 2026 年 3-4 月间影响 Claude Code 质量的三个独立问题：默认推理力度设置变更、导致模型丢失上下文的缓存 bug，以及意外损害编码性能的降低冗余 Prompt。所有问题已于 4 月 20 日修复，并引入了更广泛的评测机制与代码审查流程作为防护措施。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  }
+]

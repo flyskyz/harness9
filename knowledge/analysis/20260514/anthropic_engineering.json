@@ -1,0 +1,22 @@
+[
+  {
+    "title": "An update on recent Claude Code quality reports",
+    "url": "https://www.anthropic.com/engineering/april-23-postmortem",
+    "source": "anthropic_engineering",
+    "popularity": 9,
+    "summary": "Anthropic 披露了 2026 年 3-4 月间影响 Claude Code 质量的三个独立问题：默认推理力度设置变更、导致模型丢失上下文的缓存 bug，以及意外损害编码性能的降低冗余 Prompt。所有问题已于 4 月 20 日修复，并引入了更广泛的评测机制与代码审查流程作为防护措施。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "首次公开披露三个独立质量问题，包括缓存 bug 导致上下文丢失、Prompt 调整意外损害编码性能",
+      "所有问题已于 4 月 20 日完成修复，系统恢复正常",
+      "Anthropic 引入更广泛评测机制和代码审查流程，建立更完善的质量保障体系",
+      "该 Postmortem 展示了 Anthropic 对 Claude Code 质量问题的透明处理方式，增强了用户信任"
+    ],
+    "importance_score": 7,
+    "importance_label": "🔧 直接有帮助",
+    "suggested_tags": ["Claude-Code", "质量保障", "Postmortem", "缓存bug", "Anthropic"],
+    "deep_summary": "Anthropic 工程博客发布了关于 2026 年 3-4 月 Claude Code 质量问题的详细 Postmortem，披露了三个独立导致编程能力下降的问题：一是默认推理力度配置变更影响了输出质量，二是缓存相关 bug 导致模型在长对话中丢失关键上下文，三是旨在减少冗余的 Prompt 调整意外损害了编码性能。所有问题已于 4 月 20 日修复，并伴随评测覆盖面扩展和代码审查流程强化作为后续防护措施。这份 Postmortem 对于使用 Claude Code 的开发团队具有直接参考价值：它揭示了 LLM 产品质量退化的典型模式（配置变更、缓存逻辑、Prompt 工程三个维度），同时也体现了 Anthropic 对产品质量的负责任态度。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/anthropic_engineering.json"]
+  }
+]

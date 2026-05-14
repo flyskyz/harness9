@@ -1,0 +1,82 @@
+[
+  {
+    "title": "obra/superpowers",
+    "url": "https://github.com/obra/superpowers",
+    "source": "github_trending",
+    "popularity": 190078,
+    "summary": "Superpowers 是一个 Agentic Skills 框架与软件开发方法论，提供经过实战验证的 AI 编程工作流方式。总星数超过 19 万，今日新增 1401 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "rasbt/LLMs-from-scratch",
+    "url": "https://github.com/rasbt/LLMs-from-scratch",
+    "source": "github_trending",
+    "popularity": 94625,
+    "summary": "从零开始用 PyTorch 实现类 ChatGPT 大型语言模型的完整教程项目，逐步讲解 LLM 的核心原理与代码实现，是 LLM 学习领域的标杆资源。今日新增 821 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "mattpocock/skills",
+    "url": "https://github.com/mattpocock/skills",
+    "source": "github_trending",
+    "popularity": 79917,
+    "summary": "面向真实工程师的 Agent Skills 集合，直接来自作者的 .claude 目录，为 Claude Code 等 AI 编程助手提供可复用的技能框架。今日新增 3392 颗星，是当日 GitHub 增速最快的 AI 相关仓库。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "trycua/cua",
+    "url": "https://github.com/trycua/cua",
+    "source": "github_trending",
+    "popularity": 16649,
+    "summary": "CUA 是面向计算机使用 Agent (Computer-Use Agent) 的开源基础设施，提供沙箱、SDK 和基准测试，支持在 macOS、Linux、Windows 全桌面环境中训练和评测 AI Agent。今日新增 245 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "danielmiessler/Personal_AI_Infrastructure",
+    "url": "https://github.com/danielmiessler/Personal_AI_Infrastructure",
+    "source": "github_trending",
+    "popularity": 13540,
+    "summary": "个人 AI 基础设施项目，提供完整的 Agentic AI 基础设施方案以放大人类能力，涵盖工具链编排、上下文管理等核心 Agent 组件。今日新增 435 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "yikart/AiToEarn",
+    "url": "https://github.com/yikart/AiToEarn",
+    "source": "github_trending",
+    "popularity": 13310,
+    "summary": "AiToEarn 是一个利用 AI 能力实现收益变现的 TypeScript 平台工具，汇聚了多种 AI 商业化应用场景。今日新增 981 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "millionco/react-doctor",
+    "url": "https://github.com/millionco/react-doctor",
+    "source": "github_trending",
+    "popularity": 9417,
+    "summary": "React Doctor 是一个专门检测 AI Agent 生成的低质量 React 代码的工具，通过静态分析与规则引擎识别 AI 编写代码中的常见问题，提升 AI 辅助开发的代码质量。今日新增 604 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "rohitg00/agentmemory",
+    "url": "https://github.com/rohitg00/agentmemory",
+    "source": "github_trending",
+    "popularity": 8231,
+    "summary": "基于真实基准测试排名第一的 AI 编程 Agent 持久化记忆方案，使用 TypeScript 构建，解决 AI Agent 跨会话上下文保持问题。今日新增 1379 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "tinyhumansai/openhuman",
+    "url": "https://github.com/tinyhumansai/openhuman",
+    "source": "github_trending",
+    "popularity": 6471,
+    "summary": "OpenHuman 是一款注重隐私、简洁强大的个人 AI 超级智能框架，使用 Rust 构建，主打私有化部署与极致性能。今日新增 1696 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  },
+  {
+    "title": "supertone-inc/supertonic",
+    "url": "https://github.com/supertone-inc/supertonic",
+    "source": "github_trending",
+    "popularity": 4714,
+    "summary": "Supertonic 是闪电级快速、设备端运行的多语言 TTS 引擎，通过 ONNX 原生运行，支持离线 AI 语音合成。今日新增 859 颗星。",
+    "collected_at": "2026-05-14T08:00:00Z"
+  }
+]

@@ -1,0 +1,98 @@
+[
+  {
+    "title": "Show HN: Needle: We Distilled Gemini Tool Calling into a 26M Model",
+    "url": "https://github.com/cactus-compute",
+    "source": "hacker_news",
+    "popularity": 667,
+    "summary": "Cactus Compute 团队将 Gemini 的工具调用能力蒸馏到一个仅 2600 万参数的轻量模型 Needle 中，实现了极低延迟、可本地部署的工具调用推理能力，引发社区对小模型工具调用能力的广泛讨论。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "将 Gemini 的工具调用能力蒸馏到仅 2600 万参数的超小模型中，参数量压缩幅度极为显著",
+      "实现极低延迟的本地工具调用推理，无需依赖大型云端模型",
+      "知识蒸馏路线证明工具调用这类特定能力可以高效迁移至小模型",
+      "引发社区广泛讨论，获得 667 热度，是当日 HN 热度最高的 AI 相关帖子",
+      "对边缘计算和端侧 Agent 场景的工具调用能力部署具有重要意义"
+    ],
+    "importance_score": 9,
+    "importance_label": "⭐ 改变格局",
+    "suggested_tags": ["知识蒸馏", "小模型", "工具调用", "边缘推理", "Gemini"],
+    "deep_summary": "Cactus Compute 团队发布了 Needle 模型，将 Gemini 的工具调用（Function Calling）能力蒸馏到仅 2600 万参数的超轻量模型中，这一突破意味着高质量的工具调用能力不再需要依赖数百亿参数的大型模型。该成果对端侧 Agent 部署具有里程碑意义：低延迟、低功耗、可离线运行的工具调用推理将使 Agent 能力下沉至移动设备、IoT 等资源受限场景。获得 HN 667 热度，是当日社区关注度最高的 AI 技术突破，反映出业界对小模型能力边界的高度关注。知识蒸馏路线的成功将可能激发更多针对特定 Agent 能力的专项蒸馏研究。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/hacker_news.json"]
+  },
+  {
+    "title": "The US is winning the AI race where it matters most: commercialization",
+    "url": "https://avkcode.github.io",
+    "source": "hacker_news",
+    "popularity": 192,
+    "summary": "文章分析美国在 AI 商业化落地方面的领先优势，认为真正决定 AI 竞争格局的核心是商业变现能力而非纯技术研究，并对比了美国与其他国家在 AI 产业化方面的进展。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "将 AI 竞争焦点从技术研究转向商业化能力，提供了不同视角的竞争分析框架",
+      "对比美国与其他国家在 AI 产业化落地方面的差距",
+      "获得 192 热度，引发社区对 AI 地缘竞争格局的讨论"
+    ],
+    "importance_score": 4,
+    "importance_label": "👀 可略过",
+    "suggested_tags": ["AI竞争", "商业化", "产业分析", "地缘政治"],
+    "deep_summary": "该文章从商业化视角分析美国在全球 AI 竞争中的领先地位，认为决定长期格局的关键不在于纯技术指标，而在于将 AI 技术转化为商业价值的能力。文章对比了美国与其他国家在 AI 产业化方面的进展，论点具有一定的讨论价值，但整体属于宏观分析类内容，技术信息密度较低，对实际工程决策的参考价值有限。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/hacker_news.json"]
+  },
+  {
+    "title": "Claude for Small Business",
+    "url": "https://www.anthropic.com",
+    "source": "hacker_news",
+    "popularity": 166,
+    "summary": "Anthropic 推出面向小型企业的 Claude 服务，降低了 AI 助手的使用门槛，为中小企业提供可负担的 AI 工作流自动化和智能助手能力。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "Anthropic 拓展面向中小企业的市场，降低 Claude 使用门槛",
+      "提供面向非技术用户的 AI 工作流自动化能力",
+      "是 Claude 商业化策略向长尾市场延伸的重要信号"
+    ],
+    "importance_score": 5,
+    "importance_label": "📖 值得了解",
+    "suggested_tags": ["Anthropic", "Claude", "中小企业", "AI工作流", "商业化"],
+    "deep_summary": "Anthropic 推出面向小型企业的 Claude 服务，通过降低定价门槛和简化使用方式，将 Claude 的 AI 能力延伸至中小企业市场。这一举措表明 Anthropic 正在从面向技术开发者的 API 业务向更广泛的商业客群扩展，与 OpenAI 在 SMB 市场的竞争策略趋于一致。对于 AI 应用开发者，了解主流 AI 厂商的市场布局有助于判断未来产品形态和定价趋势。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/hacker_news.json"]
+  },
+  {
+    "title": "A Claude Code and Codex Skill for Deliberate Skill Development",
+    "url": "https://github.com/drcathicks",
+    "source": "hacker_news",
+    "popularity": 19,
+    "summary": "介绍了一种专门为 Claude Code 和 OpenAI Codex 设计的 Agent Skill，旨在通过刻意练习方法论提升 AI 辅助开发中的技能培养效果，属于 Agent Skills 工程实践方向的探索。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "将刻意练习方法论引入 Agent Skill 设计，视角新颖",
+      "同时支持 Claude Code 和 OpenAI Codex，具备跨平台适用性",
+      "属于 Agent Skills 工程实践的早期探索，与当日热门趋势方向一致"
+    ],
+    "importance_score": 4,
+    "importance_label": "👀 可略过",
+    "suggested_tags": ["Agent-Skills", "Claude-Code", "刻意练习", "AI辅助开发"],
+    "deep_summary": "该帖子介绍了一种将刻意练习方法论融入 Agent Skill 设计的实践探索，针对 Claude Code 和 OpenAI Codex 两个平台提供技能培养框架。尽管方向与当日 GitHub 热门趋势（Agent Skills 工程化）高度吻合，但获得的热度仅 19 分，说明具体内容和实用性尚未达到社区广泛认可的程度，参考价值较为有限。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/hacker_news.json"]
+  },
+  {
+    "title": "LLMs are breaking 20 year old system design",
+    "url": "https://zknill.io",
+    "source": "hacker_news",
+    "popularity": 4,
+    "summary": "文章探讨 LLM 如何颠覆传统软件系统设计的基本假设，分析了 AI 在系统架构层面带来的范式变革，讨论了二十年来软件工程实践受到的冲击。",
+    "collected_at": "2026-05-14T08:00:00Z",
+    "highlights": [
+      "探讨 LLM 对传统系统设计基本假设的颠覆",
+      "分析二十年软件工程实践在 AI 时代面临的挑战"
+    ],
+    "importance_score": 3,
+    "importance_label": "👀 可略过",
+    "suggested_tags": ["LLM", "系统设计", "范式变革", "软件工程"],
+    "deep_summary": "该文章从系统设计视角讨论 LLM 对传统软件工程范式的冲击，探讨了 AI 如何改变过去二十年形成的系统架构惯例。热度仅 4 分，说明内容影响力有限，可能属于个人观点文章而非有深度的技术分析。话题方向本身有价值，但该具体文章的信息密度和可信度有待进一步评估。",
+    "analyzed_at": "2026-05-14T10:00:00Z",
+    "raw_files": ["knowledge/raw/20260514/hacker_news.json"]
+  }
+]
