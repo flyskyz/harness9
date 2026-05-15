@@ -37,9 +37,18 @@ import (
 	"github.com/harness9/internal/tools"
 )
 
+// version 由 goreleaser ldflags 在发布构建时注入；本地开发构建显示 "dev"。
+var version = "dev"
+
 func main() {
+	versionMode := flag.Bool("version", false, "打印版本号并退出")
 	feishuMode := flag.Bool("feishu", false, "启动飞书 Bot 模式（需配置 FEISHU_APP_ID / FEISHU_APP_SECRET）")
 	flag.Parse()
+
+	if *versionMode {
+		fmt.Println("harness9 " + version)
+		return
+	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
