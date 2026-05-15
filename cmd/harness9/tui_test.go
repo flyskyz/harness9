@@ -85,9 +85,6 @@ func TestEventToolResult_ClearsCurrentToolAndAppendsLine(t *testing.T) {
 	if m.currentTool != "" {
 		t.Errorf("currentTool should be cleared, got %q", m.currentTool)
 	}
-	if m.statusLine != "" {
-		t.Errorf("statusLine should be cleared, got %q", m.statusLine)
-	}
 	if len(m.lines) == 0 {
 		t.Error("completion line should be appended to scrollback")
 	}
@@ -118,7 +115,6 @@ func TestEventDone_ResetsRunningState(t *testing.T) {
 	m := newTestModel()
 	m.running = true
 	m.currentTool = "bash"
-	m.statusLine = "⠼ bash [1s]"
 	m.lines = []string{""}
 	var cancelled bool
 	m.cancelFn = func() { cancelled = true }
@@ -131,29 +127,31 @@ func TestEventDone_ResetsRunningState(t *testing.T) {
 	if m.currentTool != "" {
 		t.Errorf("currentTool should be cleared, got %q", m.currentTool)
 	}
-	if m.statusLine != "" {
-		t.Errorf("statusLine should be cleared, got %q", m.statusLine)
-	}
 	if !cancelled {
 		t.Error("EventDone should call cancelFn to release context")
 	}
 }
 
-func TestEventError_SetsStatusLineAndResetsRunning(t *testing.T) {
+func TestEventError_AppendsToScrollbackAndResetsRunning(t *testing.T) {
 	m := newTestModel()
 	m.running = true
 	m.currentTool = "bash"
+	m.lines = []string{"partial text"}
+	m.pendingReplyStart = 0
 
 	m = applyUpdate(m, eventMsg{Type: engine.EventError, Data: "context cancelled"})
 
 	if m.running {
 		t.Error("running should be false after EventError")
 	}
-	if !strings.Contains(m.statusLine, "context cancelled") {
-		t.Errorf("statusLine should contain error message, got %q", m.statusLine)
-	}
 	if m.currentTool != "" {
 		t.Errorf("currentTool should be cleared, got %q", m.currentTool)
+	}
+	if len(m.lines) == 0 {
+		t.Fatal("error line should be appended to scrollback")
+	}
+	if !strings.Contains(m.lines[len(m.lines)-1], "context cancelled") {
+		t.Errorf("last line should contain error message, got %q", m.lines[len(m.lines)-1])
 	}
 }
 

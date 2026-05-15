@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -21,11 +22,6 @@ import (
 
 // package-level lipgloss 样式：在 View() 外定义，避免每帧重复分配。
 var (
-	headerStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("237")).
-			Foreground(lipgloss.Color("12")).
-			Padding(0, 1)
-
 	userMsgStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("12")).
 			Bold(true)
@@ -35,7 +31,7 @@ var (
 			Bold(true)
 
 	dimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8"))
+			Foreground(lipgloss.Color("240"))
 
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("9"))
@@ -51,7 +47,21 @@ var (
 	toolErrStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))             // 红色：失败
 	doneStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true) // 绿色粗体：任务完成
 	skillStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))            // 青色：技能激活
+	cyanStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
+	brandStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true)
+	sepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 )
+
+type tuiPhase int
+
+const (
+	phaseWelcome tuiPhase = iota
+	phaseChat
+)
+
+var spinnerVerbs = []string{
+	"思考中", "分析中", "处理中", "推理中", "计算中", "评估中",
+}
 
 // eventMsg 将 engine.Event 包装为 tea.Msg，供 Bubbletea 的 Update 分发。
 type eventMsg engine.Event
@@ -84,13 +94,16 @@ type tuiModel struct {
 	viewTop int
 
 	// Footer 组件
-	spinner    spinner.Model
-	statusLine string
-	input      textinput.Model
+	spinner   spinner.Model
+	phase     tuiPhase
+	verbIdx   int
+	tickCount int
+	input     textinput.Model
 
 	// 当前工具跟踪（用于耗时展示）
 	currentTool string
 	toolStart   time.Time
+	toolArgs    json.RawMessage
 
 	// Markdown 流式渲染状态：
 	// streaming 期间将 delta 追加到 pendingReply，
@@ -134,6 +147,7 @@ func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, outerCtx context.Co
 		eng:         eng,
 		skillsIndex: idx,
 		viewTop:     -1, // -1 = 自动跟随底部
+		phase:       phaseWelcome,
 	}
 }
 
@@ -195,6 +209,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if raw == "" {
 				return m, nil
 			}
+			m.phase = phaseChat
 			m.input.Reset()
 			// 清除补全状态
 			m.typedPrefix = ""
@@ -225,6 +240,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ctx, cancel := context.WithCancel(m.outerCtx)
 			m.cancelFn = cancel
 			m.running = true
+			if m.eng == nil {
+				m.input.Focus()
+				return m, textinput.Blink
+			}
 			m.input.Blur()
 			ch, err := m.eng.RunStream(ctx, prompt)
 			if err != nil {
@@ -245,8 +264,6 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.running && m.currentTool != "" {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
-			elapsed := time.Since(m.toolStart).Round(time.Millisecond)
-			m.statusLine = fmt.Sprintf("%s %s  [%s]", m.spinner.View(), m.currentTool, elapsed)
 			return m, cmd
 		}
 		return m, nil
@@ -283,7 +300,7 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		tc, _ := evt.Data.(schema.ToolCall)
 		m.currentTool = tc.Name
 		m.toolStart = time.Now()
-		m.statusLine = toolRunStyle.Render(fmt.Sprintf("  ⠿ %s...", tc.Name))
+		m.toolArgs = tc.Arguments
 		return m, tea.Batch(readNextEvent(m.eventCh), tea.Cmd(m.spinner.Tick))
 
 	case engine.EventToolResult:
@@ -298,7 +315,7 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		m.lines = append(m.lines, line)
 		m.pendingReplyStart = len(m.lines) // 下一个回复文本块从这里开始
 		m.currentTool = ""
-		m.statusLine = ""
+		m.toolArgs = nil
 		return m, readNextEvent(m.eventCh)
 
 	case engine.EventDone:
@@ -308,7 +325,7 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		}
 		m.running = false
 		m.currentTool = ""
-		m.statusLine = ""
+		m.toolArgs = nil
 		// 纯工具执行无文字回复时，补充完成标记
 		if len(m.lines) > 0 && m.lines[len(m.lines)-1] == "" {
 			m.lines[len(m.lines)-1] = doneStyle.Render("  ✅ 任务完成")
@@ -326,7 +343,7 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		}
 		m.running = false
 		m.currentTool = ""
-		m.statusLine = errorStyle.Render("❌ " + errMsg)
+		m.lines = append(m.lines, errorStyle.Render("❌ "+errMsg))
 		m.input.Focus()
 		return m, textinput.Blink
 	}
@@ -491,9 +508,7 @@ func (m tuiModel) View() string {
 	}
 
 	// Header：logo + 模型名 + workdir
-	header := headerStyle.Width(m.width).Render(
-		fmt.Sprintf("⬡ harness9   %s · %s", m.modelName, m.workDir),
-	)
+	header := fmt.Sprintf("⬡ harness9   %s · %s", m.modelName, m.workDir)
 
 	scrollH := m.scrollHeight()
 
@@ -526,7 +541,7 @@ func (m tuiModel) View() string {
 	var statusContent string
 	switch {
 	case m.running:
-		statusContent = m.statusLine
+		statusContent = ""
 	case m.viewTop >= 0:
 		maxTop := len(m.lines) - scrollH
 		if maxTop < 1 {
