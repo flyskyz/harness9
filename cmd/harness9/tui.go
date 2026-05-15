@@ -267,6 +267,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		if m.running && m.currentTool != "" {
+			m.tickCount++
+			if m.tickCount%30 == 0 {
+				m.verbIdx = (m.verbIdx + 1) % len(spinnerVerbs)
+			}
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -356,10 +360,14 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 	return m, readNextEvent(m.eventCh)
 }
 
-// scrollHeight 返回 scrollback 区域可显示的行数（终端高度减去固定 footer 行）。
+// scrollHeight 返回对话区域可显示的行数。
+// 运行中且有活跃工具时额外保留 1 行给 ToolProgress。
 func (m tuiModel) scrollHeight() int {
-	const reservedLines = 3
-	h := m.height - reservedLines
+	reserved := 3 // StatusBar + PromptInput + Footer
+	if m.running && m.currentTool != "" {
+		reserved = 4 // + ToolProgress
+	}
+	h := m.height - reserved
 	if h < 1 {
 		h = 1
 	}

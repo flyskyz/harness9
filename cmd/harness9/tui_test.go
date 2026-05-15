@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/harness9/internal/engine"
@@ -338,5 +339,56 @@ func TestSummarizeTool_InvalidArgs(t *testing.T) {
 	got := summarizeTool("bash", args)
 	if got != "" {
 		t.Errorf("invalid args should return empty string, got %q", got)
+	}
+}
+
+func TestPhaseTransition_WelcomeToChat(t *testing.T) {
+	m := newTestModel()
+	if m.phase != phaseWelcome {
+		t.Fatal("new model should start in phaseWelcome")
+	}
+	m.input.SetValue("hello world")
+
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.phase != phaseChat {
+		t.Errorf("phase should be phaseChat after first Enter, got %v", m.phase)
+	}
+}
+
+func TestPhaseStaysChat_AfterFirstEnter(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseChat
+	m.input.SetValue("second message")
+
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.phase != phaseChat {
+		t.Errorf("phase should remain phaseChat, got %v", m.phase)
+	}
+}
+
+func TestSpinnerVerbRotation(t *testing.T) {
+	m := newTestModel()
+	m.running = true
+	m.currentTool = "bash"
+	m.verbIdx = 0
+	m.tickCount = 29
+
+	m = applyUpdate(m, spinner.TickMsg{})
+
+	if m.tickCount != 30 {
+		t.Errorf("tickCount should be 30, got %d", m.tickCount)
+	}
+	if m.verbIdx != 1 {
+		t.Errorf("verbIdx should advance to 1 after 30 ticks, got %d", m.verbIdx)
+	}
+
+	// verify wraparound
+	m.verbIdx = 5
+	m.tickCount = 59
+	m = applyUpdate(m, spinner.TickMsg{})
+	if m.verbIdx != 0 {
+		t.Errorf("verbIdx should wrap to 0, got %d", m.verbIdx)
 	}
 }
