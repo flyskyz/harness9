@@ -514,65 +514,6 @@ func splitLines(s string) []string {
 	return strings.Split(s, "\n")
 }
 
-// View 实现 tea.Model——渲染完整 TUI 帧。
-func (m tuiModel) View() string {
-	if m.width == 0 {
-		return ""
-	}
-
-	// Header：logo + 模型名 + workdir
-	header := fmt.Sprintf("⬡ harness9   %s · %s", m.modelName, m.workDir)
-
-	scrollH := m.scrollHeight()
-
-	// Scrollback：根据 viewTop 决定展示哪段内容
-	var scrollLines []string
-	if m.viewTop < 0 || len(m.lines) <= scrollH {
-		// 自动跟随底部
-		if len(m.lines) >= scrollH {
-			scrollLines = m.lines[len(m.lines)-scrollH:]
-		} else {
-			pad := make([]string, scrollH-len(m.lines))
-			scrollLines = append(pad, m.lines...)
-		}
-	} else {
-		// 手动滚动：从 viewTop 开始展示
-		start := m.viewTop
-		end := start + scrollH
-		if end > len(m.lines) {
-			end = len(m.lines)
-		}
-		scrollLines = m.lines[start:end]
-		if len(scrollLines) < scrollH {
-			pad := make([]string, scrollH-len(scrollLines))
-			scrollLines = append(pad, scrollLines...)
-		}
-	}
-	scrollContent := strings.Join(scrollLines, "\n")
-
-	// Status Bar（1 行）：运行时显示工具进度；手动滚动时显示位置；idle 显示补全提示
-	var statusContent string
-	switch {
-	case m.running:
-		statusContent = ""
-	case m.viewTop >= 0:
-		maxTop := len(m.lines) - scrollH
-		if maxTop < 1 {
-			maxTop = 1
-		}
-		pct := m.viewTop * 100 / maxTop
-		statusContent = dimStyle.Render(fmt.Sprintf("  ↑ PgUp/PgDn 滚动  ·  End 回到底部  (%d%%)", pct))
-	default:
-		statusContent = m.completionHint
-	}
-	statusBar := statusBarStyle.Width(m.width).Render(statusContent)
-
-	// Input（1 行）
-	inputLine := "› " + m.input.View()
-
-	return strings.Join([]string{header, scrollContent, statusBar, inputLine}, "\n")
-}
-
 // summarizeTool 根据工具名对参数进行智能截断摘要，用于 ToolProgress 展示。
 func summarizeTool(name string, args json.RawMessage) string {
 	switch name {
