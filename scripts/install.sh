@@ -22,11 +22,14 @@ esac
 
 # ── 获取最新版本号 ─────────────────────────────────────────
 echo "正在查询最新版本..."
-VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-  | grep '"tag_name"' \
-  | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+API_RESPONSE=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")
+if command -v jq &>/dev/null; then
+  VERSION=$(printf '%s' "$API_RESPONSE" | jq -r .tag_name)
+else
+  VERSION=$(printf '%s' "$API_RESPONSE" | grep -o '"tag_name":"[^"]*"' | grep -o '[^"]*"$' | tr -d '"')
+fi
 
-if [ -z "$VERSION" ]; then
+if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
   echo "错误：无法获取版本号，请检查网络或仓库地址" >&2
   exit 1
 fi
@@ -45,23 +48,22 @@ curl -fsSL "$URL" -o "$TMP/$TARBALL"
 curl -fsSL "$CHECKSUM_URL" -o "$TMP/SHA256SUMS"
 
 # ── 校验 SHA256 ────────────────────────────────────────────
-cd "$TMP"
 if command -v sha256sum &>/dev/null; then
-  grep "$TARBALL" SHA256SUMS | sha256sum -c -
+  grep "$TARBALL" "$TMP/SHA256SUMS" | (cd "$TMP" && sha256sum -c -)
 elif command -v shasum &>/dev/null; then
-  grep "$TARBALL" SHA256SUMS | shasum -a 256 -c -
+  grep "$TARBALL" "$TMP/SHA256SUMS" | (cd "$TMP" && shasum -a 256 -c -)
 else
   echo "警告：未找到 sha256sum 或 shasum，跳过校验" >&2
 fi
 
 # ── 解压并安装 ─────────────────────────────────────────────
-tar -xzf "$TARBALL"
+tar -xzf "$TMP/$TARBALL" -C "$TMP"
 
 if [ ! -w "$INSTALL_DIR" ]; then
   echo "需要 sudo 权限写入 ${INSTALL_DIR}..."
-  sudo install -m755 "$BINARY" "$INSTALL_DIR/$BINARY"
+  sudo install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
 else
-  install -m755 "$BINARY" "$INSTALL_DIR/$BINARY"
+  install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
 fi
 
 echo ""
