@@ -66,52 +66,157 @@ class DeepAgentApp(App):
 
 ### 2.2 OpenHarness（HKUDS）
 
+> **信息质量：高**——直接阅读 GitHub 源码 15+ 个文件（`protocol.py`、`backend_host.py`、`react_launcher.py`、`runtime.py`、`app.py`、`input.py`、`App.tsx`、`useBackendSession.ts`、`Spinner.tsx`、`StatusBar.tsx`、`ToolCallDisplay.tsx`、`ConversationView.tsx`、`PromptInput.tsx`、`ThemeContext.tsx`、`builtinThemes.ts`、`Footer.tsx`、`TranscriptPane.tsx`）
+
 **CLI 发布方式**
 
-- Python + Node.js 混合项目
-- Python 后端通过 pip 安装；前端 TUI 通过 npm 安装
-- 两个进程通过 Unix Socket 通信
+- Python + Node.js 混合项目；Python 后端通过 pip 安装，Node.js 前端通过 npm 安装
+- 入口：`react_launcher.py` 负责 spawn Node.js 前端进程，并将配置通过 `OPENHARNESS_FRONTEND_CONFIG` 环境变量注入
+- 前后端通过 **stdio 管道 + OHJSON JSON-Lines 协议**通信（非 Unix Socket）
 
 **WorkDir 分离机制**
 
-- 启动时通过环境变量 `OPENHARNESS_WORKDIR` 或 `--root` 参数指定
-- Python 后端持有 workdir，Node.js 前端只做展示
-- 工具调用路径校验在 Python 侧完成
+- Python 后端启动时通过 `--root` 参数或 `OPENHARNESS_WORKDIR` 环境变量持有 workdir
+- Node.js 前端通过 `useBackendSession` hook spawn Python 子进程，workdir 与前端进程完全隔离
+- 工具路径校验在 Python 侧统一完成，前端无需感知文件系统
 
-**TUI 实现**
+**TUI 实现——三模式渐进降级**
 
-- Python 侧：[prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit)（处理输入）
-- Node.js 侧：[React/Ink](https://github.com/vadimdemedes/ink)（渲染 UI）
-- 布局：全屏 / inline 双模式，通过 `--mode` 切换
-- 流式输出：Ink 的 `<Text>` 组件 + useEffect 监听 socket 事件
+OpenHarness 同时维护三种 TUI 模式：
 
-```tsx
-// OpenHarness Node.js TUI 核心（简化）
-const ChatView: FC = () => {
-  const [lines, setLines] = useState<string[]>([]);
-  
-  useEffect(() => {
-    socket.on("token", (delta: string) => {
-      setLines(prev => {
-        const next = [...prev];
-        next[next.length - 1] += delta;
-        return next;
-      });
-    });
-  }, []);
-  
-  return <Box flexDirection="column">
-    {lines.map((l, i) => <Text key={i}>{l}</Text>)}
-  </Box>;
-};
+| 模式 | 实现 | 适用场景 |
+|------|------|---------|
+| **React/Ink TUI**（主推） | Node.js + React 18 + Ink 5 | 交互式终端，全功能 |
+| **Textual TUI**（备用） | Python + Textual | 无 Node.js 环境降级 |
+| **print 模式** | Python + Rich | 管道/CI 非交互环境 |
+
+**React/Ink TUI 布局**（垂直 flexbox，自上而下）：
+
 ```
+┌─────────────────────────────────────────────────┐
+│  WelcomeBanner（首次启动可选）                     │
+├─────────────────────────────────────────────────┤
+│  ConversationView（flex-grow: 1）                │  ← 最近 40 条，全树重绘
+│   ├─ TranscriptPane（68% 宽）                    │
+│   └─ SidePanel / SwarmPanel / TodoPanel（32%）   │
+├─────────────────────────────────────────────────┤
+│  ModalHost / CommandPicker（条件渲染叠加层）       │
+├─────────────────────────────────────────────────┤
+│  StatusBar（model │ tokens │ mode │ tasks）       │
+│  PromptInput（多行输入 + 光标）                   │
+│  Footer（完整状态调试行）                         │
+└─────────────────────────────────────────────────┘
+```
+
+注：与 OpenCode 的"纯 Scrollback + Footer"不同，OpenHarness 采用**固定 40 条窗口 + 全树重绘**策略，无真正的历史滚动。
+
+**IPC 通信协议——OHJSON stdio 协议**
+
+核心通信协议为 stdio 管道 + JSON-Lines，消息格式：`OHJSON:<json_payload>\n`。非 `OHJSON:` 前缀的行被前端识别为日志直接插入转录视图。
+
+进程启动流程：
+
+```
+用户运行 oh
+    │
+    ▼ react_launcher.py
+    │  spawn(tsx src/index.tsx, env={OPENHARNESS_FRONTEND_CONFIG: json(...)})
+    ▼
+frontend/terminal/src/index.tsx  ← Ink 渲染 <App>
+    │
+    │ useBackendSession() → spawn("python -m openharness --backend-only",
+    │                             stdio: ['pipe', 'pipe', 'inherit'])
+    ▼
+backend_host.py  ← 读 stdin / 写 stdout (OHJSON 行)
+    │
+    ▼
+runtime.py → engine.submit_message() → async for event: ...
+```
+
+**后端 → 前端，16 种 BackendEvent 类型**：
+
+| 事件类型 | 触发时机 | 关键字段 |
+|---------|---------|---------|
+| `ready` | 后端初始化完成 | `state`（初始 AppState） |
+| `assistant_delta` | LLM token 流 | `message`（增量文本） |
+| `assistant_complete` | 一轮输出结束 | — |
+| `tool_started` | 工具开始执行 | `tool_name`, `tool_input` |
+| `tool_completed` | 工具执行完毕 | `tool_name` |
+| `transcript_item` | 新增对话条目 | `item`（TranscriptItem） |
+| `state_snapshot` | 配置/模型切换 | `state` |
+| `tasks_snapshot` | 任务列表变更 | `tasks[]` |
+| `modal_request` | 需要用户确认权限 | `modal` |
+| `select_request` | 显示选择菜单 | `commands[]` |
+| `compact_progress` | 上下文压缩进度 | `compact_phase` |
+| `plan_mode_change` | 切换 Plan Mode | `plan_mode` |
+| `swarm_status` | 多 Agent 状态 | `swarm_teammates[]` |
+| `todo_update` | Todo 列表更新 | — |
+| `error` | 后端异常 | `message` |
+| `shutdown` | 后端主动退出 | — |
+
+**前端 → 后端**：8 种 FrontendRequest 类型（`submit_line`、`interrupt`、`permission_response`、`question_response`、`list_sessions`、`select_command`、`apply_select_command`、`shutdown`）。
+
+**流式输出机制**
+
+后端 `runtime.py` 核心循环：
+
+```python
+async def handle_line(line, bundle, render_event):
+    async for event in bundle.engine.submit_message(line):
+        await render_event(event)
+```
+
+前端 `useBackendSession` 用 readline 监听后端 stdout，对 `assistant_delta` 事件做 **30fps 节流**（每 33ms flush 一次缓冲），避免 token 峰值时 React 频繁重渲染：
+
+```typescript
+// 约 30fps 节流累积 delta
+const flushInterval = setInterval(() => {
+  if (pendingBuffer) {
+    setAssistantBuffer(prev => prev + pendingBuffer);
+    pendingBuffer = '';
+  }
+}, 33);
+```
+
+`assistantBuffer` 作为独立状态实时渲染"正在输入"的当前行，`assistant_complete` 事件触发后转入 transcript 列表。
+
+**工具进度展示**
+
+Spinner 组件实现 100ms 帧动画 + 3s 动词轮换：
+
+```typescript
+const VERBS = ['Thinking', 'Processing', 'Analyzing', 'Reasoning',
+                'Working', 'Computing', 'Evaluating', 'Considering'];
+
+// Windows 平台降级为 ASCII [-\|/]，其他平台用主题定义的 Unicode braille 字符
+const frames = process.platform === 'win32'
+  ? ['-', '\\', '|', '/']
+  : theme.icons.spinner;  // 默认：⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏
+```
+
+`ToolCallDisplay` 组件通过 `summarizeInput()` 按工具类型智能截断参数：bash 命令截 120 字符，文件操作只显示路径，grep 只显示 pattern。
+
+`StatusBar` 格式：`model: xxx │ tokens: 1.2k↓ 0.8k↑ │ mode: default │ tasks: 3`；Plan Mode 时黄色加粗显示 `[PLAN MODE]`，写操作工具显示红色 `🚫 blocked`。
+
+**输入处理**
+
+- `PromptInput` 以 `cursorOffset`（字节偏移）追踪光标，支持 Left/Right 移动
+- `Shift+Return` 插入换行，普通 `Return` 提交
+- CJK 处理：依赖 `string-width` 包计算双宽字符宽度，未显式使用 `Intl.Segmenter`，光标定位对 CJK 存在潜在偏差风险
+
+**主题/样式系统**
+
+5 套内置主题（`default` / `dark` / `minimal` / `cyberpunk` / `solarized`），每套包含 10 个颜色属性 + spinner 帧字符数组。通过 `OPENHARNESS_FRONTEND_CONFIG` 在启动时注入，运行时可动态切换。**无自动深/浅色检测**，默认主题使用终端原色。
 
 **优劣分析**
 
-- ✅ 前后端分离，职责清晰
-- ✅ 双进程架构天然支持 SSH 远程模式
-- ❌ 两套运行时依赖，安装复杂
-- ❌ Socket 通信引入延迟和序列化开销
+- ✅ OHJSON stdio 协议轻量，无需 Socket/HTTP，进程间通信零延迟
+- ✅ 三模式渐进降级（React TUI → Textual → print），环境适配能力强
+- ✅ 30fps 节流避免 React 渲染峰值，流式输出性能稳定
+- ✅ Plan Mode + 权限确认弹框，生产级安全管控
+- ❌ 两套运行时依赖（Python + Node.js），安装体验复杂
+- ❌ 固定 40 条全树重绘，无真正滚动历史，长对话性能劣于 Scrollback 架构
+- ❌ CJK 光标定位依赖底层，存在偏差风险
 
 ---
 
@@ -539,6 +644,66 @@ func main() {
 4. **工具进度**：复用 `engine.EventToolStart` / `EventToolResult`，无需新增接口
 5. **Ctrl+C 中断**：捕获 `tea.KeyMsg{Type: tea.KeyCtrlC}` 后调用 `context.CancelFunc`，引擎三重终止保障自动生效
 
+### 5.6 以 OpenHarness 为对标的 harness9 TUI 重构要点
+
+harness9 将 TUI 重构为对标 OpenHarness 方案时，以下设计点可直接借鉴或映射：
+
+**A. Spinner 动词轮换 ✅ 已实现**
+
+OpenHarness Spinner 每 3 秒轮换动词。在 Bubbletea 中，在 `spinner.TickMsg` 处理中维护 `verbIdx`，每 30 次 tick（100ms/tick × 30 = 3s）递增：
+
+```go
+var spinnerVerbs = []string{"思考中", "分析中", "处理中", "推理中", "计算中", "评估中"}
+
+// Update 中：
+case spinner.TickMsg:
+    if m.running && m.currentTool != "" {
+        m.tickCount++
+        if m.tickCount%30 == 0 {
+            m.verbIdx = (m.verbIdx + 1) % len(spinnerVerbs)
+        }
+        var cmd tea.Cmd
+        m.spinner, cmd = m.spinner.Update(msg)
+        return m, cmd
+    }
+```
+
+**B. 工具调用内联摘要 ✅ 已实现**
+
+OpenHarness `summarizeInput()` 按工具类型智能截断，harness9 对应实现（`tui_update.go:summarizeTool()`）：
+
+| 工具 | 摘要策略 |
+|------|---------|
+| `bash` | 截取命令前 120 字符，换行符替换为 ` ↵ ` |
+| `read_file` / `write_file` / `edit_file` | `filepath.Base(path)`，只显示文件名 |
+| 其他 | JSON 字符串截取前 80 字符 |
+
+**C. StatusBar 信息密度（参考格式）**
+
+参考 OpenHarness `model: xxx │ tokens: 1.2k↓ 0.8k↑ │ mode: default │ tasks: 3` 格式。当前实现（`tui_view.go:renderStatusBar()`）采用字符串拼接 + lipgloss 样式渲染，格式为 `model: <name>  │  mode: Default  │  <workdir>`。token 统计需要 provider 层返回 usage 信息，暂未实现。
+
+**D. 三模式渐进降级（架构参考）✅ 已实现**
+
+OpenHarness 三层降级对应 harness9：
+
+| OpenHarness 模式 | harness9 对应 |
+|-----------------|--------------|
+| React/Ink TUI | 全屏 Bubbletea TUI（`term.IsTerminal(os.Stdin.Fd())` 为 true） |
+| Textual TUI | inline 简单 REPL（`cli.go`） |
+| print 模式 | NDJSON 事件流（`--stream-json`，未来） |
+
+**E. 30fps 流式节流 ✅ 已实现（Bubbletea 天然缓冲）**
+
+OpenHarness 前端对 `assistant_delta` 做 33ms 节流。harness9 在 `RunStream` 中，`EventActionDelta` 事件已通过 channel 传递给 Bubbletea，Bubbletea 自身的事件队列天然起到节流缓冲作用，无需额外处理。
+
+**F. OHJSON 协议（SSH 远端场景参考）**
+
+harness9 单进程，`engine.Event` channel 已解决通信问题。但若未来支持"远端 Agent + 本地 TUI"（SSH 开发场景），OHJSON stdio JSON-Lines 是最轻量的跨进程方案：`OHJSON:<json>\n` 前缀协议即可复用现有 `engine.Event` 结构。
+
+**G. Windows 兼容 Spinner 降级（待实现）**
+
+参考 OpenHarness 的 `process.platform === 'win32'` 降级，harness9 初始化 spinner 时可检测 `runtime.GOOS == "windows"` 降级为 ASCII 帧 `[-, \, |, /]`，避免 Windows Console Host 的 Unicode 方块问题。
+
 ---
 
 ## 6. 已调研框架清单与信息质量
@@ -546,7 +711,7 @@ func main() {
 | 框架 | 信息获取质量 | 主要来源 |
 |------|:-----------:|---------|
 | DeepAgents | 中 | README + GitHub 源码 |
-| OpenHarness | 中 | README + 源码目录结构 |
+| **OpenHarness** | **高** | 直接阅读 GitHub 源码 15+ 文件（protocol、backend_host、react_launcher、App.tsx、useBackendSession 等） |
 | **OpenCode** | **高** | README + 源码 + 官方文档 |
 | OpenClaw | 中 | README + 部分源码 |
 | HermesAgent | 中 | README + GitHub Issues |

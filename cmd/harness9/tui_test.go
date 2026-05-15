@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/harness9/internal/engine"
@@ -61,7 +63,7 @@ func TestEventToolStart_SetsCurrentTool(t *testing.T) {
 	m := newTestModel()
 	m.running = true
 
-	tc := schema.ToolCall{Name: "bash", ID: "1"}
+	tc := schema.ToolCall{Name: "bash", ID: "1", Arguments: json.RawMessage(`{"command":"ls"}`)}
 	m = applyUpdate(m, eventMsg{Type: engine.EventToolStart, Data: tc})
 
 	if m.currentTool != "bash" {
@@ -69,6 +71,9 @@ func TestEventToolStart_SetsCurrentTool(t *testing.T) {
 	}
 	if m.toolStart.IsZero() {
 		t.Error("toolStart should be set when tool starts")
+	}
+	if m.toolArgs == nil {
+		t.Error("toolArgs should be set on EventToolStart")
 	}
 }
 
@@ -84,9 +89,6 @@ func TestEventToolResult_ClearsCurrentToolAndAppendsLine(t *testing.T) {
 
 	if m.currentTool != "" {
 		t.Errorf("currentTool should be cleared, got %q", m.currentTool)
-	}
-	if m.statusLine != "" {
-		t.Errorf("statusLine should be cleared, got %q", m.statusLine)
 	}
 	if len(m.lines) == 0 {
 		t.Error("completion line should be appended to scrollback")
@@ -118,7 +120,6 @@ func TestEventDone_ResetsRunningState(t *testing.T) {
 	m := newTestModel()
 	m.running = true
 	m.currentTool = "bash"
-	m.statusLine = "⠼ bash [1s]"
 	m.lines = []string{""}
 	var cancelled bool
 	m.cancelFn = func() { cancelled = true }
@@ -131,29 +132,31 @@ func TestEventDone_ResetsRunningState(t *testing.T) {
 	if m.currentTool != "" {
 		t.Errorf("currentTool should be cleared, got %q", m.currentTool)
 	}
-	if m.statusLine != "" {
-		t.Errorf("statusLine should be cleared, got %q", m.statusLine)
-	}
 	if !cancelled {
 		t.Error("EventDone should call cancelFn to release context")
 	}
 }
 
-func TestEventError_SetsStatusLineAndResetsRunning(t *testing.T) {
+func TestEventError_AppendsToScrollbackAndResetsRunning(t *testing.T) {
 	m := newTestModel()
 	m.running = true
 	m.currentTool = "bash"
+	m.lines = []string{"partial text"}
+	m.pendingReplyStart = 0
 
 	m = applyUpdate(m, eventMsg{Type: engine.EventError, Data: "context cancelled"})
 
 	if m.running {
 		t.Error("running should be false after EventError")
 	}
-	if !strings.Contains(m.statusLine, "context cancelled") {
-		t.Errorf("statusLine should contain error message, got %q", m.statusLine)
-	}
 	if m.currentTool != "" {
 		t.Errorf("currentTool should be cleared, got %q", m.currentTool)
+	}
+	if len(m.lines) == 0 {
+		t.Fatal("error line should be appended to scrollback")
+	}
+	if !strings.Contains(m.lines[len(m.lines)-1], "context cancelled") {
+		t.Errorf("last line should contain error message, got %q", m.lines[len(m.lines)-1])
 	}
 }
 
@@ -284,5 +287,120 @@ func TestKeyPgDown_AtBottom_StaysAutoScroll(t *testing.T) {
 
 	if m.viewTop != -1 {
 		t.Errorf("PgDn at auto-scroll bottom should keep viewTop=-1, got %d", m.viewTop)
+	}
+}
+
+func TestSummarizeTool_Bash(t *testing.T) {
+	args := json.RawMessage(`{"command":"go test ./... 2>&1 | head -20"}`)
+	got := summarizeTool("bash", args)
+	if got != "go test ./... 2>&1 | head -20" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestSummarizeTool_Bash_Truncates(t *testing.T) {
+	long := strings.Repeat("x", 130)
+	args := json.RawMessage(`{"command":"` + long + `"}`)
+	got := summarizeTool("bash", args)
+	if len([]rune(got)) != 121 { // 120 chars + "…"
+		t.Errorf("expected 121 runes (120 + ellipsis), got %d: %q", len([]rune(got)), got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("expected ellipsis suffix, got %q", got)
+	}
+}
+
+func TestSummarizeTool_ReadFile(t *testing.T) {
+	args := json.RawMessage(`{"path":"/home/user/project/main.go"}`)
+	got := summarizeTool("read_file", args)
+	if got != "main.go" {
+		t.Errorf("got %q, want %q", got, "main.go")
+	}
+}
+
+func TestSummarizeTool_Other(t *testing.T) {
+	args := json.RawMessage(`{"key":"value"}`)
+	got := summarizeTool("custom_tool", args)
+	if got != `{"key":"value"}` {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestSummarizeTool_WriteFile(t *testing.T) {
+	args := json.RawMessage(`{"path":"/home/user/project/utils.go","content":"package main"}`)
+	got := summarizeTool("write_file", args)
+	if got != "utils.go" {
+		t.Errorf("got %q, want %q", got, "utils.go")
+	}
+}
+
+func TestSummarizeTool_InvalidArgs(t *testing.T) {
+	args := json.RawMessage(`not-json`)
+	got := summarizeTool("bash", args)
+	if got != "" {
+		t.Errorf("invalid args should return empty string, got %q", got)
+	}
+}
+
+func TestPhaseTransition_WelcomeToChat(t *testing.T) {
+	m := newTestModel()
+	if m.phase != phaseWelcome {
+		t.Fatal("new model should start in phaseWelcome")
+	}
+	m.input.SetValue("hello world")
+
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.phase != phaseChat {
+		t.Errorf("phase should be phaseChat after first Enter, got %v", m.phase)
+	}
+}
+
+func TestPhaseStaysChat_AfterFirstEnter(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseChat
+	m.input.SetValue("second message")
+
+	m = applyUpdate(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.phase != phaseChat {
+		t.Errorf("phase should remain phaseChat, got %v", m.phase)
+	}
+}
+
+func TestSpinnerVerbRotation(t *testing.T) {
+	m := newTestModel()
+	m.running = true
+	m.currentTool = "bash"
+	m.verbIdx = 0
+	m.tickCount = 29
+
+	m = applyUpdate(m, spinner.TickMsg{})
+
+	if m.tickCount != 30 {
+		t.Errorf("tickCount should be 30, got %d", m.tickCount)
+	}
+	if m.verbIdx != 1 {
+		t.Errorf("verbIdx should advance to 1 after 30 ticks, got %d", m.verbIdx)
+	}
+
+	// verify wraparound
+	m.verbIdx = 5
+	m.tickCount = 59
+	m = applyUpdate(m, spinner.TickMsg{})
+	if m.verbIdx != 0 {
+		t.Errorf("verbIdx should wrap to 0, got %d", m.verbIdx)
+	}
+}
+
+func TestScrollHeight_DynamicReservedLines(t *testing.T) {
+	m := newTestModel() // height = 24
+	if got := m.scrollHeight(); got != 21 {
+		t.Errorf("idle: want 21 (24-3), got %d", got)
+	}
+	m.running = true
+	m.currentTool = "bash"
+	if got := m.scrollHeight(); got != 20 {
+		t.Errorf("running with tool: want 20 (24-4), got %d", got)
 	}
 }
