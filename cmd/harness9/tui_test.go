@@ -392,3 +392,15 @@ func TestSpinnerVerbRotation(t *testing.T) {
 		t.Errorf("verbIdx should wrap to 0, got %d", m.verbIdx)
 	}
 }
+
+func TestScrollHeight_DynamicReservedLines(t *testing.T) {
+	m := newTestModel() // height = 24
+	if got := m.scrollHeight(); got != 21 {
+		t.Errorf("idle: want 21 (24-3), got %d", got)
+	}
+	m.running = true
+	m.currentTool = "bash"
+	if got := m.scrollHeight(); got != 20 {
+		t.Errorf("running with tool: want 20 (24-4), got %d", got)
+	}
+}
