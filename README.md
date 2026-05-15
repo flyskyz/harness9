@@ -55,23 +55,35 @@
 $ go run ./cmd/harness9
 ```
 
+**WelcomeBanner 欢迎页**（首屏）：
+
 ```
-┌─────────────────────────────────────────────┐
-│ ⬡ harness9   gpt-4o-mini · ~/myproject     │
-├─────────────────────────────────────────────┤
-│                                             │
-│  ▶ You: 帮我分析 main.go 里的 bug           │
-│                                             │
-│  ◆ harness9:                               │
-│    好的，我先读取文件...                    │
-│    ✓ read_file(main.go) — 234ms            │
-│    发现第 42 行存在空指针解引用问题         │
-│                                             │
-├─────────────────────────────────────────────┤
-│  ⠼ bash(go test ./...)  [3.2s]             │
-├─────────────────────────────────────────────┤
-│  › _                                        │
-└─────────────────────────────────────────────┘
+         ╦ ╦  ╔╦╗  ╔═╗  ╔╗╦  ╔══  ╔══  ╔══  ╔═╗
+         ╠═╣  ╠╩╣  ╠╦╝  ║╚╗  ╠═   ╚═╗  ╚═╗  ╚═╣
+         ╩ ╩  ╚ ╝  ╩╗   ╩ ╩  ╚══  ══╝  ══╝    ╝
+
+  harness9  ·  An AI-powered coding agent
+  /skill 加载技能  │  Tab 补全  │  Ctrl+C 退出
+  ──────────────────────────────────────────────
+  model: gpt-4o-mini  │  mode: Default  │  ~/myproject
+  › 输入任务...
+  enter 发送  / 技能命令  ↑↓ 滚动  ctrl+c 退出
+```
+
+**对话页**（首次 Enter 后切换）：
+
+```
+  ▶ You: 帮我分析 main.go 里的 bug
+
+  ◆ harness9:
+    好的，我先读取文件...
+    ✓ read_file(main.go) — 234ms
+    发现第 42 行存在空指针解引用问题
+
+  ⠼ 思考中...  bash(go test ./...)  [3.2s]
+  model: gpt-4o-mini  │  mode: Default  │  ~/myproject
+  › _
+  enter 发送  / 技能命令  ↑↓ 滚动  ctrl+c 退出
 ```
 
 - 流式输出逐 token 追加，实时显示推理过程
@@ -334,7 +346,7 @@ func main() {
 
 | 模块 | 说明 | 状态 |
 |------|------|:----:|
-| **TUI** | 全屏 TUI（Bubbletea）：流式输出 + spinner + 单行输入，TTY 自动检测 | ✅ |
+| **TUI** | 全屏 TUI（Bubbletea）：WelcomeBanner + 对话页双 Phase、流式输出、Spinner 动词轮换、Tab 补全、滚动 | ✅ |
 | **Engine** | 标准 ReAct 主循环，阻塞 + 流式双模式 | ✅ |
 | **Context** | System Prompt 结构化组装（基础 + AGENTS.md + Skills 索引） | ✅ |
 | **Skills** | Skills 解析、索引、按需加载（`use_skill` 工具） | ✅ |
@@ -354,8 +366,11 @@ harness9/
 ├── cmd/
 │   └── harness9/
 │       ├── main.go                  # 程序入口：TUI（TTY）/ CLI（管道）/ 飞书 Bot（--feishu）
-│       ├── tui.go                   # 全屏 TUI 实现（Bubbletea Elm Architecture）
-│       ├── tui_test.go              # TUI Update 逻辑单元测试（37 个用例）
+│       ├── tui.go                   # TUI 核心：tuiModel struct、样式变量、Init、RunTUI
+│       ├── tui_update.go            # Update 逻辑：事件处理、键盘、滚动、Tab 补全、Markdown 渲染
+│       ├── tui_view.go              # View 渲染：renderConversation/ToolProgress/StatusBar/Input/Footer
+│       ├── tui_banner.go            # WelcomeBanner：HARNESS9 ASCII Art + bannerContent()
+│       ├── tui_test.go              # TUI Update 逻辑单元测试（45 个用例）
 │       ├── cli.go                   # 交互式 CLI REPL 实现
 │       ├── bot.go                   # Bot 编排层（IMChannel × AgentEngine，事件流映射）
 │       └── bot_test.go              # Bot 事件映射单元测试

@@ -149,8 +149,11 @@ harness9/
 ├── cmd/
 │   └── harness9/
 │       ├── main.go                  # 程序入口：TUI（TTY）/ CLI（管道）/ 飞书 Bot（--feishu）
-│       ├── tui.go                   # 全屏 TUI 实现（Bubbletea Elm Architecture）
-│       ├── tui_test.go              # TUI Update 逻辑单元测试（37 个用例）
+│       ├── tui.go                   # TUI 核心：tuiModel struct、样式变量、Init、RunTUI
+│       ├── tui_update.go            # Update 逻辑：事件处理、键盘、滚动、Tab 补全、Markdown 渲染
+│       ├── tui_view.go              # View 渲染：renderConversation/ToolProgress/StatusBar/Input/Footer
+│       ├── tui_banner.go            # WelcomeBanner：HARNESS9 ASCII Art + bannerContent()
+│       ├── tui_test.go              # TUI Update 逻辑单元测试（45 个用例）
 │       ├── cli.go                   # 交互式 CLI REPL 实现
 │       ├── bot.go                   # Bot 编排层（IMChannel × AgentEngine，事件流映射）
 │       └── bot_test.go              # Bot 事件映射单元测试
@@ -247,7 +250,7 @@ harness9/
 | 模块 | 职责 | 状态 |
 |------|------|:----:|
 | **cmd/harness9** | 主入口：TTY 自动检测选择 TUI / CLI；`--feishu` 启动飞书 Bot | ✅ |
-| **tui** | 全屏 TUI（Bubbletea）：流式输出、工具 spinner、单行输入、Ctrl-C 中断 | ✅ |
+| **tui** | 全屏 TUI（Bubbletea）：WelcomeBanner + 对话页双 Phase、Spinner 动词轮换、summarizeTool 摘要、Tab 补全、Markdown 渲染 | ✅ |
 | **engine** | 标准 ReAct 主循环，阻塞 + 流式双模式，并发工具调度 | ✅ |
 | **imchannel** | IM 平台统一适配接口（IMChannel / Session 契约定义） | ✅ |
 | **imchannel/feishu** | 飞书平台实现：WebSocket 长连接接收消息，独立文本消息推送进度 | ✅ |
