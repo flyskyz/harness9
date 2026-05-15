@@ -1,0 +1,50 @@
+version: 2
+project_name: harness9
+
+builds:
+  - id: harness9
+    main: ./cmd/harness9
+    binary: harness9
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+archives:
+  - id: harness9
+    formats:
+      - tar.gz
+    name_template: "harness9_{{.Version}}_{{.Os}}_{{.Arch}}"
+    files:
+      - README.md
+
+checksum:
+  name_template: "harness9_{{.Version}}_SHA256SUMS"
+  algorithm: sha256
+
+release:
+  github:
+    owner: ZhangShenao
+    name: harness9
+  draft: false
+  prerelease: auto
+
+# brews 块待 homebrew-tap 仓库创建后启用
+# brews:
+#   - name: harness9
+#     repository:
+#       owner: ZhangShenao
+#       name: homebrew-tap
+#     homepage: "https://github.com/ZhangShenao/harness9"
+#     description: "轻量级、生产可用的 Agent Harness CLI"
+#     install: |
+#       bin.install "harness9"
+#     test: |
+#       system "#{bin}/harness9", "--version"
