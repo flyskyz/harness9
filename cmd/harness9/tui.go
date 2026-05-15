@@ -94,11 +94,15 @@ type tuiModel struct {
 	viewTop int
 
 	// Footer 组件
-	spinner   spinner.Model
-	phase     tuiPhase
-	verbIdx   int
-	tickCount int
-	input     textinput.Model
+	spinner spinner.Model
+	input   textinput.Model
+
+	// Phase 状态机
+	phase tuiPhase
+
+	// Spinner 动词轮换
+	verbIdx   int // 0-5，当前动词索引
+	tickCount int // TickMsg 计数，每 30 次递增 verbIdx
 
 	// 当前工具跟踪（用于耗时展示）
 	currentTool string

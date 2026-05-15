@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -61,7 +62,7 @@ func TestEventToolStart_SetsCurrentTool(t *testing.T) {
 	m := newTestModel()
 	m.running = true
 
-	tc := schema.ToolCall{Name: "bash", ID: "1"}
+	tc := schema.ToolCall{Name: "bash", ID: "1", Arguments: json.RawMessage(`{"command":"ls"}`)}
 	m = applyUpdate(m, eventMsg{Type: engine.EventToolStart, Data: tc})
 
 	if m.currentTool != "bash" {
@@ -69,6 +70,9 @@ func TestEventToolStart_SetsCurrentTool(t *testing.T) {
 	}
 	if m.toolStart.IsZero() {
 		t.Error("toolStart should be set when tool starts")
+	}
+	if m.toolArgs == nil {
+		t.Error("toolArgs should be set on EventToolStart")
 	}
 }
 
