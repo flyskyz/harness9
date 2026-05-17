@@ -159,13 +159,23 @@ harness9/
 │   │   ├── agent_loop_test.go       # 主循环单元测试
 │   │   ├── stream.go                # 流式入口 RunStream + engine.Event 事件类型
 │   │   └── stream_test.go           # 流式接口单元测试
+│   ├── memory/                      # Short-Term Memory — 会话历史持久化与上下文压缩
+│   │   ├── session.go               # Session 接口 + SessionInfo 类型
+│   │   ├── manager.go               # Manager：SQLite 连接持有者 + 会话 CRUD（NewSession/OpenSession/List/Delete）
+│   │   ├── sqlite_session.go        # SQLiteSession：WAL + 事务 + tool_calls JSON 序列化
+│   │   ├── mem_session.go           # MemorySession：纯内存实现（测试用）
+│   │   ├── compaction.go            # Compactor 接口 + SlidingWindowCompactor（孤立 Observation 回溯）
+│   │   ├── sqlite_session_test.go   # SQLiteSession 集成测试
+│   │   ├── mem_session_test.go      # MemorySession 单元测试
+│   │   ├── manager_test.go          # Manager 单元测试
+│   │   └── compaction_test.go       # SlidingWindowCompactor 单元测试
 │   ├── provider/                    # 大模型接口抽象与具体厂商 SDK 实现
 │   │   ├── interface.go             # LLMProvider 接口定义（Generate + GenerateStream）
 │   │   ├── openai.go                # OpenAI 兼容 API 适配器（支持 OpenRouter / Azure）
 │   │   ├── anthropic.go             # Anthropic 兼容 API 适配器（Messages API）
 │   │   ├── tool_call_accumulator.go # OpenAI/Anthropic 共享的流式工具调用累积器
 │   │   └── providertest/            # 测试基础设施（仅在 _test 编译单元中可见）
-│   │       └── mock.go              # 确定性 mock provider（NewMock）
+│   │       └── mock.go              # 确定性 mock provider（NewMock / NewMockWithCallback）
 │   ├── schema/                      # 跨组件共享的核心数据类型
 │   │   ├── message.go               # Message、Role、ToolCall、ToolResult、ToolDefinition
 │   │   └── stream.go                # StreamChunk、StreamChunkType（Provider 层流式类型）
@@ -190,7 +200,8 @@ harness9/
 │       ├── cli.md                   # CLI 使用指南
 │       ├── agent-skills.md          # Agent Skills 设计原理
 │       ├── agent-loop.md            # Agent Loop 核心实现原理
-│       └── tool-calling.md          # Tool Calling 工具调用系统详解
+│       ├── tool-calling.md          # Tool Calling 工具调用系统详解
+│       └── short-term-memory.md     # Short-Term Memory 短期记忆实现原理
 ├── knowledge/                       # Harness 知识库（AI 技术动态采集 → 分析 → 文章生成）
 │   ├── raw/                         # 原始采集数据，按日期分目录（collector agent 写入）
 │   │   └── {YYYYMMDD}/              # 当日各来源 JSON 文件
@@ -219,29 +230,31 @@ harness9/
            │  Run / RunStream     │
            │  标准 ReAct          │
            │  工具调度 / 终止检测   │
+           │  Session/Compactor  │
            └────┬────────┬────────┘
                 │        │
-           ┌────▼──┐  ┌──▼────────┐  ┌───────────┐
-           │provid │  │  schema   │  │  tools    │
-           │ (模型) │  │  (数据层)  │  │  (工具层)  │
-           │OpenAI │  │ Message   │  │ Registry  │
-           │Anthro │  │ ToolCall  │  │ bash/read │
-           │       │  │ ToolResult│  │ write_file│
-           └───────┘  └───────────┘  └───────────┘
-                │
-           ┌────▼────┐
-           │   env   │
-           │ (配置层)  │
-           └─────────┘
+           ┌────▼──┐  ┌──▼────────┐  ┌───────────┐  ┌──────────────┐
+           │provid │  │  schema   │  │  tools    │  │   memory     │
+           │ (模型) │  │  (数据层)  │  │  (工具层)  │  │  (记忆层)    │
+           │OpenAI │  │ Message   │  │ Registry  │  │ Session      │
+           │Anthro │  │ ToolCall  │  │ bash/read │  │ Manager      │
+           │       │  │ ToolResult│  │ write_file│  │ Compactor    │
+           └───────┘  └───────────┘  └───────────┘  └──────┬───────┘
+                │                                           │
+           ┌────▼────┐                              ┌───────▼──────┐
+           │   env   │                              │   SQLite     │
+           │ (配置层)  │                              │~/.harness9/  │
+           └─────────┘                              └──────────────┘
 ```
 
 ### 模块职责
 
 | 模块 | 职责 | 状态 |
 |------|------|:----:|
-| **cmd/harness9** | 主入口：TTY 自动检测选择 TUI / CLI | ✅ |
-| **tui** | 全屏 TUI（Bubbletea）：WelcomeBanner + 对话页双 Phase、Spinner 动词轮换、summarizeTool 摘要、Tab 补全、Markdown 渲染 | ✅ |
-| **engine** | 标准 ReAct 主循环，阻塞 + 流式双模式，并发工具调度 | ✅ |
+| **cmd/harness9** | 主入口：TTY 自动检测选择 TUI / CLI；初始化 Memory Manager + 首个 Session | ✅ |
+| **tui** | 全屏 TUI（Bubbletea）：WelcomeBanner + 对话页双 Phase、Spinner 动词轮换、Tab 补全、Markdown 渲染、`/new`/`/resume` 会话管理、状态栏 session/msgs 展示 | ✅ |
+| **engine** | 标准 ReAct 主循环，阻塞 + 流式双模式，并发工具调度，Session/Compactor 集成（含并发安全 SetSession） | ✅ |
+| **memory** | Short-Term Memory：Session 接口、Manager（SQLite CRUD）、SQLiteSession（WAL + 事务）、SlidingWindowCompactor（滑动窗口 + 孤立 Observation 回溯） | ✅ |
 | **provider** | LLM 统一接口 + OpenAI / Anthropic SDK 适配器 | ✅ |
 | **schema** | 跨组件共享的核心数据类型（Message、ToolCall 等） | ✅ |
 | **tools** | 工具注册表 + 内置工具（bash / read_file / write_file）+ 路径沙箱 | ✅ |
@@ -249,7 +262,7 @@ harness9/
 | **logfmt** | 跨模块共享的块状日志渲染（FormatMsg/ToolStart/LoopStart 等 11 个格式函数） | ✅ |
 | **provider/providertest** | 测试基础设施（mock provider），不进入生产二进制 | ✅ |
 
-> **Roadmap（暂未启动）**：会话记忆持久化（memory）、上下文窗口管理。
+> **Roadmap（后续方向）**：Token Budget 压缩（P2）、LLM-based 摘要压缩（P3）、FTS5 全文会话搜索（P3）、TTL 自动过期清理（P3）。
 
 ---
 

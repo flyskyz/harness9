@@ -219,22 +219,30 @@ Turn 2:
 
 ### 4.1 初始化阶段
 
-引擎启动时，构造初始对话上下文。**WorkDir 会被注入到 system prompt** 中，使 LLM 了解其工作目录：
+引擎启动时，通过 `loadHistoryWith` 构造初始对话上下文。若注入了 `Session`，历史消息从持久化存储中恢复；否则仅含 system 提示和当前用户输入：
 
 ```go
-contextHistory := []schema.Message{
-    {
-        Role: schema.RoleSystem,
-        Content: fmt.Sprintf(
-            "You are harness9, an expert coding assistant. "+
-                "You have full access to tools in the workspace. "+
-                "Your working directory is: %s",
-            e.workDir,
-        ),
-    },
-    {Role: schema.RoleUser, Content: userPrompt},
+// loadHistoryWith 从 Session 恢复历史消息，并追加 system + user 到初始上下文。
+// startLen 标记历史消息边界，用于 saveHistoryWith 时仅保存新增消息。
+func (e *AgentEngine) loadHistoryWith(ctx context.Context, userPrompt string, sess memory.Session) ([]schema.Message, int) {
+    var history []schema.Message
+    if sess != nil {
+        history, _ = sess.GetWithLimit(ctx, 500)
+    }
+    // system prompt 注入在历史之后，不计入 startLen
+    contextHistory := append(history, schema.Message{
+        Role:    schema.RoleSystem,
+        Content: e.buildSystemPrompt(),
+    })
+    startLen := len(contextHistory) // 历史 + system 不持久化
+    contextHistory = append(contextHistory, schema.Message{
+        Role: schema.RoleUser, Content: userPrompt,
+    })
+    return contextHistory, startLen
 }
 ```
+
+**WorkDir 会被注入到 system prompt** 中，使 LLM 了解其工作目录。system prompt 本身不持久化（每次启动重建），`startLen` 标记新消息的起始位置，用于 `saveHistoryWith` 时仅保存 `msgs[startLen:]`。
 
 ### 4.2 LLM 调用阶段
 
@@ -507,6 +515,8 @@ eng := engine.NewAgentEngine(p, r, workDir,
     engine.WithMaxTurns(100),
     engine.WithToolTimeout(30 * time.Second),
     engine.WithMaxConcurrentTools(4),
+    engine.WithSession(sess),
+    engine.WithCompactor(&memory.SlidingWindowCompactor{MaxMessages: 100}),
 )
 ```
 
@@ -515,6 +525,10 @@ eng := engine.NewAgentEngine(p, r, workDir,
 | `WithMaxTurns(n)` | `int` | 50 | 单次 Run 最大 Turn 数，0 = 不限制 |
 | `WithToolTimeout(d)` | `time.Duration` | 60s | 单个工具执行超时，0 = 使用原始 context |
 | `WithMaxConcurrentTools(n)` | `int` | 0 | 同一 Turn 内最大并发工具数，0 = 不限制 |
+| `WithSession(s)` | `memory.Session` | nil | 注入会话存储，启用历史消息持久化 |
+| `WithCompactor(c)` | `memory.Compactor` | nil | 注入上下文压缩器，控制上下文窗口大小 |
+
+运行时可通过 `eng.SetSession(sess)` 切换会话（并发安全，内部使用 `sync.RWMutex`）。
 
 **双模式调用：**
 
@@ -637,7 +651,8 @@ Turn 2:
 
 | 限制 | 当前状态 | 演进方向 |
 |------|---------|---------|
-| **上下文窗口控制** | 无 token 估算和截断，contextHistory 无限增长 | 双层压缩：micro-compact（清除旧工具输出）+ LLM summarize |
+| **上下文窗口控制** | 已实现 `SlidingWindowCompactor`（消息数滑动窗口） | Token Budget 精算（P2）；LLM 语义摘要（P3） |
+| **会话历史持久化** | 已实现 SQLiteSession（WAL 模式，`~/.harness9/sessions.db`） | 多工作目录隔离；会话标签与搜索 |
 | **流式输出** | 已实现 `RunStream` + `GenerateStream`，支持逐 token delta | 扩展 SSE HTTP 端点，对接外部实时推送渠道 |
 | **权限控制** | 无 | 工具执行前统一 PermissionChecker，支持交互式确认 |
 | **Hook 系统** | 无 | PreToolUse / PostToolUse / Stop / TurnComplete 事件钩子 |

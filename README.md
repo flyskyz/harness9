@@ -28,17 +28,17 @@
                        │   │   │   │
           ┌────────────┘   │   │   └────────────┐
           ▼                ▼   ▼                 ▼
-    ┌──────────┐   ┌──────────┐   ┌──────────────────┐
-    │ Provider │   │ Schema   │   │   Tool Registry  │
-    │ (模型接口) │   │ (类型层)  │   │  (工具注册/调用)  │
-    └──────────┘   └──────────┘   └──────────────────┘
-          │                               │
-    ┌─────┴────┐                    ┌────┴────┐
-    ▼          ▼                    ▼         ▼
-┌────────┐ ┌────────┐         ┌────────┐ ┌────────┐
-│ OpenAI │ │Anthropic│        │  bash  │ │read /  │
-│Provider│ │Provider │        │  Tool  │ │write   │
-└────────┘ └────────┘         └────────┘ └────────┘
+    ┌──────────┐   ┌──────────┐   ┌──────────────────┐   ┌──────────┐
+    │ Provider │   │ Schema   │   │   Tool Registry  │   │  Memory  │
+    │ (模型接口) │   │ (类型层)  │   │  (工具注册/调用)  │   │ (记忆层)  │
+    └──────────┘   └──────────┘   └──────────────────┘   └──────────┘
+          │                               │                     │
+    ┌─────┴────┐                    ┌────┴────┐         ┌──────┴──────┐
+    ▼          ▼                    ▼         ▼         ▼             ▼
+┌────────┐ ┌────────┐         ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐
+│ OpenAI │ │Anthropic│        │  bash  │ │read /  │ │Session │ │Compactor │
+│Provider│ │Provider │        │  Tool  │ │write   │ │Manager │ │(滑动窗口) │
+└────────┘ └────────┘         └────────┘ └────────┘ └────────┘ └──────────┘
 ```
 
 **Engine** 驱动 Agent 主循环：**推理 → 工具调用 → 观察 → 继续推理**
@@ -175,6 +175,22 @@ for evt := range stream {
     }
 }
 ```
+
+### Short-Term Memory（会话历史持久化）
+
+每次对话的消息历史自动持久化到 SQLite（`~/.harness9/sessions.db`），重启后可从中断处继续：
+
+```
+$ harness9
+session: a1b2c3d4  msgs: 12         ← 状态栏实时显示当前会话 ID 和消息数
+
+harness9> /new       # 开启全新会话
+harness9> /resume    # 列出历史会话并选择恢复
+```
+
+**SlidingWindowCompactor** 在上下文超出窗口限制时自动压缩，始终保留系统提示和最新 N 条消息，并回溯对齐孤立的工具调用观察，避免 LLM API 报错。
+
+详见 [Short-Term Memory 技术方案](docs/核心功能/short-term-memory.md)。
 
 ### 自愈能力
 
@@ -440,6 +456,7 @@ harness9/
 | [Agent Skills 设计原理](docs/核心功能/agent-skills.md) | Progressive Disclosure、frontmatter 规范、use_skill 工具 |
 | [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md) | 标准 ReAct 设计原理、PromptBuilder、流式架构 |
 | [Tool Calling 工具调用系统](docs/核心功能/tool-calling.md) | 工具接口、并发模型、内置工具详解、扩展指南 |
+| [Short-Term Memory 技术方案](docs/核心功能/short-term-memory.md) | SQLiteSession、SlidingWindowCompactor、TUI 集成、并发安全设计 |
 | [AGENTS.md](AGENTS.md) | 项目开发规范、编码标准、架构决策 |
 
 ---
