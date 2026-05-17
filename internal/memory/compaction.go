@@ -20,9 +20,16 @@ type SlidingWindowCompactor struct {
 // 边界修正：若窗口第一条消息是工具执行结果（ToolCallID != ""），
 // 向前回溯直到找到配对的 assistant 工具请求消息，保证上下文完整。
 func (c *SlidingWindowCompactor) Compact(msgs []schema.Message) []schema.Message {
+	if len(msgs) == 0 || msgs[0].Role != schema.RoleSystem {
+		return msgs
+	}
+
 	max := c.MaxMessages
 	if max <= 0 {
 		max = 100
+	}
+	if max < 2 {
+		max = 2 // must hold at least system + one turn
 	}
 	if len(msgs) <= max {
 		return msgs

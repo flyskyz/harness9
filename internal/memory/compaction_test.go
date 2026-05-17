@@ -98,3 +98,39 @@ func TestSlidingWindow_DefaultMaxMessages(t *testing.T) {
 		t.Fatalf("want 3, got %d", len(got))
 	}
 }
+
+func TestSlidingWindow_MaxMessagesOne(t *testing.T) {
+	// MaxMessages=1 means only system fits; treated as min 2
+	c := &memory.SlidingWindowCompactor{MaxMessages: 1}
+	input := []schema.Message{
+		{Role: schema.RoleSystem, Content: "sys"},
+		{Role: schema.RoleUser, Content: "u1"},
+		{Role: schema.RoleAssistant, Content: "a1"},
+	}
+	got := c.Compact(input) // must not panic
+	if got[0].Role != schema.RoleSystem {
+		t.Error("first msg must be system")
+	}
+}
+
+func TestSlidingWindow_EmptyInput(t *testing.T) {
+	c := &memory.SlidingWindowCompactor{MaxMessages: 5}
+	got := c.Compact(nil)
+	if len(got) != 0 {
+		t.Errorf("want 0, got %d", len(got))
+	}
+}
+
+func TestSlidingWindow_NoSystemMessage(t *testing.T) {
+	c := &memory.SlidingWindowCompactor{MaxMessages: 2}
+	input := []schema.Message{
+		{Role: schema.RoleUser, Content: "u1"},
+		{Role: schema.RoleUser, Content: "u2"},
+		{Role: schema.RoleUser, Content: "u3"},
+	}
+	// No system message: should return unchanged
+	got := c.Compact(input)
+	if len(got) != 3 {
+		t.Errorf("want 3 (unchanged), got %d", len(got))
+	}
+}
