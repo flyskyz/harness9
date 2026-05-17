@@ -68,7 +68,7 @@ func (s *SQLiteSession) GetMessages(ctx context.Context, limit int) ([]schema.Me
 		msgs = append(msgs, msg)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("迭代消息: %w", err)
 	}
 
 	if limit > 0 {
@@ -147,19 +147,21 @@ func (s *SQLiteSession) PopMessage(ctx context.Context) (*schema.Message, error)
 		return nil, fmt.Errorf("查询最新消息: %w", err)
 	}
 
+	msg := &schema.Message{Role: schema.Role(roleStr), Content: content}
+	if toolCallsJS.Valid && toolCallsJS.String != "" {
+		if err := json.Unmarshal([]byte(toolCallsJS.String), &msg.ToolCalls); err != nil {
+			return nil, fmt.Errorf("反序列化 tool_calls: %w", err)
+		}
+	}
+	if toolCallID.Valid {
+		msg.ToolCallID = toolCallID.String
+	}
+
 	if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE id = ?`, id); err != nil {
 		return nil, fmt.Errorf("删除消息: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("提交事务: %w", err)
-	}
-
-	msg := &schema.Message{Role: schema.Role(roleStr), Content: content}
-	if toolCallsJS.Valid && toolCallsJS.String != "" {
-		_ = json.Unmarshal([]byte(toolCallsJS.String), &msg.ToolCalls)
-	}
-	if toolCallID.Valid {
-		msg.ToolCallID = toolCallID.String
 	}
 	return msg, nil
 }
