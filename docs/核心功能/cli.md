@@ -19,6 +19,37 @@ harness9 --version
 # harness9 v0.1.0
 ```
 
+---
+
+## 升级
+
+已安装 harness9 的用户可直接通过内置 `upgrade` 命令升级到最新版本：
+
+```bash
+harness9 upgrade
+```
+
+升级过程：
+
+1. 查询 GitHub Releases API，获取最新版本号
+2. 与当前版本比较，若已是最新则退出
+3. 下载适用于当前平台（OS / 架构）的压缩包
+4. SHA256 校验（确保完整性）
+5. 解压并原子替换当前可执行文件
+
+示例输出：
+
+```
+正在检查最新版本...
+发现新版本：v0.1.1（当前：0.1.0）
+正在下载 harness9_0.1.1_darwin_arm64.tar.gz...
+正在校验 SHA256...
+正在解压...
+升级成功：harness9 v0.1.1
+```
+
+> **注意**：若 harness9 安装在需要 root 权限的目录（如 `/usr/local/bin`），升级时可能提示权限错误，请使用 `sudo harness9 upgrade`。
+
 ### 从源码构建（开发者）
 
 ```bash

@@ -36,6 +36,15 @@ import (
 var version = "dev"
 
 func main() {
+	// upgrade 子命令在 flag 解析前处理，避免与 flag 系统冲突。
+	if len(os.Args) > 1 && os.Args[1] == "upgrade" {
+		if err := RunUpgrade(version); err != nil {
+			fmt.Fprintf(os.Stderr, "升级失败: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	versionMode := flag.Bool("version", false, "打印版本号并退出")
 	flag.Parse()
 
