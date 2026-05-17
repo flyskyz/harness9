@@ -120,13 +120,25 @@ func (m *MockWithCallback) Generate(_ context.Context, msgs []schema.Message, to
 	return &result, nil
 }
 
-func (m *MockWithCallback) GenerateStream(_ context.Context, msgs []schema.Message, tools []schema.ToolDefinition) (<-chan schema.StreamChunk, error) {
+func (m *MockWithCallback) GenerateStream(ctx context.Context, msgs []schema.Message, tools []schema.ToolDefinition) (<-chan schema.StreamChunk, error) {
 	result := m.fn(msgs, tools)
-	ch := make(chan schema.StreamChunk, 2)
-	if result.Content != "" {
-		ch <- schema.StreamChunk{Type: schema.StreamChunkTextDelta, Delta: result.Content}
-	}
-	ch <- schema.StreamChunk{Type: schema.StreamChunkDone, Message: &result}
-	close(ch)
+	ch := make(chan schema.StreamChunk)
+	go func() {
+		defer close(ch)
+		send := func(chunk schema.StreamChunk) bool {
+			select {
+			case <-ctx.Done():
+				return false
+			case ch <- chunk:
+				return true
+			}
+		}
+		if result.Content != "" {
+			if !send(schema.StreamChunk{Type: schema.StreamChunkTextDelta, Delta: result.Content}) {
+				return
+			}
+		}
+		send(schema.StreamChunk{Type: schema.StreamChunkDone, Message: &result})
+	}()
 	return ch, nil
 }
