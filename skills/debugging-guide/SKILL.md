@@ -89,16 +89,16 @@ for _, def := range registry.GetAvailableTools() {
 
 症状：工具返回 `路径超出工作区范围` 或类似错误
 
-原因：路径包含 `../` 或绝对路径指向 `WORK_DIR` 之外。
+原因：路径包含 `../` 或绝对路径指向启动目录之外。
 
-修复：Agent 应使用相对于 `WORK_DIR` 的路径，如 `internal/engine/agent_loop.go` 而非 `/absolute/path/...`。
+修复：Agent 应使用相对于启动目录的路径，如 `internal/engine/agent_loop.go` 而非 `/absolute/path/...`。
 
 ### Skills 未加载
 
 症状：Agent 不知道有 Skills 可用
 
 检查：
-1. `skills/` 目录是否在 `WORK_DIR` 下（而非项目根目录的其他位置）
+1. `skills/` 目录是否在项目根目录（启动目录）下
 2. 每个 Skill 是否在独立子目录中，且子目录内有 `SKILL.md` 文件
 3. `SKILL.md` 是否包含 `name` 和 `description` frontmatter 字段
 4. 启动日志中是否有 `[skills]` warn 输出

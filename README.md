@@ -111,7 +111,7 @@ harness9> exit
 
 ### Agent Skills（按需加载的领域知识）
 
-在 `WORK_DIR/skills/` 下放置子目录，每个子目录包含一个 `SKILL.md` 文件。Agent 启动时感知索引，按需加载全文。遵循 **Progressive Disclosure** 原则，System Prompt 始终精简：
+在项目根目录的 `skills/` 下放置子目录，每个子目录包含一个 `SKILL.md` 文件。Agent 启动时感知索引，按需加载全文。遵循 **Progressive Disclosure** 原则，System Prompt 始终精简：
 
 ```
 your-project/
@@ -175,23 +175,6 @@ for evt := range stream {
     }
 }
 ```
-
-### 飞书 Bot 接入（可选）
-
-通过 `--feishu` 标志启动飞书 Bot 模式，WebSocket 长连接接收消息，实时推送思考进度：
-
-```bash
-go run ./cmd/harness9 --feishu
-```
-
-```
-🤔 思考中...
-🔧 调用工具：bash
-✅ bash（123ms）
-<最终回复>
-```
-
-详见 [IM 渠道接入详解](docs/核心功能/im-channel.md)。
 
 ### 自愈能力
 
@@ -267,9 +250,6 @@ go run ./cmd/harness9
 ```env
 OPENAI_API_KEY=sk-...
 
-# 可选：指定 Agent 工作目录（默认为进程 cwd，通常无需设置）
-# WORK_DIR=/Users/yourname/myproject
-
 # 可选：切换模型
 LLM_MODEL=openai/gpt-4o-mini
 
@@ -279,7 +259,7 @@ LLM_MODEL=openai/gpt-4o-mini
 
 ### 添加 Project Guidelines
 
-在 `WORK_DIR` 根目录放置 `AGENTS.md`，启动时自动注入 System Prompt：
+在项目根目录放置 `AGENTS.md`，启动时自动注入 System Prompt：
 
 ```markdown
 # 我的项目规范
@@ -294,7 +274,7 @@ LLM_MODEL=openai/gpt-4o-mini
 
 ### 添加 Skills
 
-在 `WORK_DIR/skills/<name>/SKILL.md` 路径创建技能文件：
+在 `skills/<name>/SKILL.md` 路径创建技能文件：
 
 ```bash
 mkdir -p skills/refactor-guide
@@ -315,19 +295,6 @@ description: Use when refactoring Go code — explains team conventions
 ```
 
 CLI 模式下可用 `/refactor-guide` 直接激活该技能。
-
-### 启动飞书 Bot（可选）
-
-需额外配置飞书凭证：
-
-```bash
-# .env 中添加
-FEISHU_APP_ID=cli_xxx
-FEISHU_APP_SECRET=xxx
-
-# 启动
-go run ./cmd/harness9 --feishu
-```
 
 ### 测试
 
@@ -385,8 +352,6 @@ func main() {
 | **Provider** | LLM 统一接口，OpenAI / Anthropic 适配器 | ✅ |
 | **Schema** | 跨组件共享的核心数据类型 | ✅ |
 | **Tools** | 工具注册表 + 内置工具（bash / read_file / write_file / edit_file） | ✅ |
-| **IMChannel** | IM 平台统一适配接口（IMChannel / Session 契约） | ✅ |
-| **Feishu** | 飞书 WebSocket 长连接接入 + 进度消息推送 | ✅ |
 | **Env** | 零依赖 `.env` 配置加载器 | ✅ |
 
 ---
@@ -397,15 +362,13 @@ func main() {
 harness9/
 ├── cmd/
 │   └── harness9/
-│       ├── main.go                  # 程序入口：TUI（TTY）/ CLI（管道）/ 飞书 Bot（--feishu）
+│       ├── main.go                  # 程序入口：TUI（TTY）/ CLI（管道）
 │       ├── tui.go                   # TUI 核心：tuiModel struct、样式变量、Init、RunTUI
 │       ├── tui_update.go            # Update 逻辑：事件处理、键盘、滚动、Tab 补全、Markdown 渲染
 │       ├── tui_view.go              # View 渲染：renderConversation/ToolProgress/StatusBar/Input/Footer
 │       ├── tui_banner.go            # WelcomeBanner：HARNESS9 ASCII Art + bannerContent()
 │       ├── tui_test.go              # TUI Update 逻辑单元测试（45 个用例）
-│       ├── cli.go                   # 交互式 CLI REPL 实现
-│       ├── bot.go                   # Bot 编排层（IMChannel × AgentEngine，事件流映射）
-│       └── bot_test.go              # Bot 事件映射单元测试
+│       └── cli.go                   # 交互式 CLI REPL 实现
 ├── internal/
 │   ├── engine/
 │   │   ├── agent_loop.go            # 共享 runLoop + 阻塞式 Run + PromptBuilder 接口
@@ -421,12 +384,6 @@ harness9/
 │   │   ├── loader.go                # LoadSkills(dir) → *Index
 │   │   ├── use_skill_tool.go        # use_skill 工具（实现 tools.BaseTool）
 │   │   └── skills_test.go           # Skills 系统单元测试（20 个测试用例）
-│   ├── imchannel/
-│   │   ├── channel.go               # IMChannel / Session 接口定义
-│   │   └── feishu/
-│   │       ├── client.go            # 飞书 WebSocket 长连接适配器
-│   │       ├── session.go           # 飞书 Session 实现（思考/工具进度/最终回复）
-│   │       └── session_test.go      # 辅助函数单元测试
 │   ├── provider/
 │   │   ├── interface.go             # LLMProvider 接口定义
 │   │   ├── openai.go                # OpenAI 兼容 API 适配器
@@ -457,8 +414,7 @@ harness9/
 │       ├── agent-skills.md          # Agent Skills 设计原理
 │       ├── tui.md                   # TUI 交互界面实现原理
 │       ├── agent-loop.md            # Agent Loop 核心实现原理
-│       ├── tool-calling.md          # Tool Calling 工具调用系统详解
-│       └── im-channel.md            # IM 渠道接入详解（飞书 Bot 实现原理）
+│       └── tool-calling.md          # Tool Calling 工具调用系统详解
 ├── skills/                          # 示例 Skills（可复制到你的项目中使用）
 │   ├── go-coding-standards/
 │   │   └── SKILL.md
@@ -484,7 +440,6 @@ harness9/
 | [Agent Skills 设计原理](docs/核心功能/agent-skills.md) | Progressive Disclosure、frontmatter 规范、use_skill 工具 |
 | [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md) | 标准 ReAct 设计原理、PromptBuilder、流式架构 |
 | [Tool Calling 工具调用系统](docs/核心功能/tool-calling.md) | 工具接口、并发模型、内置工具详解、扩展指南 |
-| [IM 渠道接入详解](docs/核心功能/im-channel.md) | 飞书 Bot 实现原理、接口契约、事件映射规则 |
 | [AGENTS.md](AGENTS.md) | 项目开发规范、编码标准、架构决策 |
 
 ---

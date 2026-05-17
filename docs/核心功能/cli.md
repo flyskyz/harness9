@@ -1,6 +1,6 @@
 # harness9 CLI 使用指南
 
-harness9 默认以**交互式终端 Agent（CLI REPL）**模式运行。无需配置飞书即可直接在终端与 Agent 对话。
+harness9 默认以**交互式终端 Agent（CLI REPL）**模式运行，直接在终端与 Agent 对话。
 
 ---
 
@@ -57,7 +57,6 @@ harness9>
 | 变量 | 必填 | 默认值 | 说明 |
 |------|:----:|--------|------|
 | `OPENAI_API_KEY` | ✅ | — | LLM Provider API Key |
-| `WORK_DIR` | ❌ | 进程工作目录（`cwd`） | Agent 工具的沙箱根目录，所有文件操作被限制在此目录内 |
 | `LLM_MODEL` | ❌ | `openai/gpt-4o-mini` | 模型名称，支持任意 OpenAI 兼容模型 |
 | `OPENAI_BASE_URL` | ❌ | OpenAI 官方地址 | 自定义 API 地址，可接入 OpenRouter / Azure / 本地模型 |
 
@@ -73,7 +72,6 @@ export LLM_MODEL="openai/gpt-4o-mini"
 
 ```env
 OPENAI_API_KEY=sk-...
-WORK_DIR=/Users/yourname/myproject
 LLM_MODEL=openai/gpt-4o-mini
 # OPENAI_BASE_URL=https://openrouter.ai/api/v1
 ```
@@ -86,7 +84,7 @@ LLM_MODEL=openai/gpt-4o-mini
 
 ### 基本对话
 
-在 `harness9>` 提示符后输入任何问题或指令，Agent 将在 `WORK_DIR` 下执行任务：
+在 `harness9>` 提示符后输入任何问题或指令，Agent 将在启动目录下执行任务：
 
 ```
 harness9> 列出当前目录下的所有 Go 文件
@@ -109,21 +107,26 @@ harness9> 在 main.go 里添加一个 --version 标志
 
 ---
 
-## 工作目录（WORK_DIR）
+## 工作目录
 
-`WORK_DIR` 是 Agent 的**沙箱边界**。所有文件读写、命令执行均在此目录内进行：
+harness9 以**启动时的进程工作目录（cwd）**作为 Agent 的沙箱边界，无需任何配置：
 
-- `read_file`、`write_file`、`edit_file` 工具会拒绝访问 `WORK_DIR` 以外的路径
-- `bash` 工具的工作目录也被设定为 `WORK_DIR`
+```bash
+cd /your/project
+harness9   # 沙箱根目录 = /your/project
+```
+
+所有文件读写、命令执行均被限制在此目录内：
+
+- `read_file`、`write_file`、`edit_file` 工具会拒绝访问启动目录以外的路径
+- `bash` 工具的工作目录也被设定为启动目录
 - 路径穿越攻击（`../../etc/passwd`）被自动拦截
-
-推荐将 `WORK_DIR` 指向你希望 Agent 协助操作的**具体项目目录**，而非系统根目录。
 
 ---
 
 ## Project Guidelines（AGENTS.md）
 
-在 `WORK_DIR` 根目录放置 `AGENTS.md` 文件，Agent 启动时会自动将其内容注入 System Prompt，作为项目级规范和上下文指南。
+在项目根目录放置 `AGENTS.md` 文件，Agent 启动时会自动将其内容注入 System Prompt，作为项目级规范和上下文指南。
 
 **典型用途：**
 - 描述项目架构、技术栈、编码规范
@@ -148,7 +151,7 @@ harness9> 在 main.go 里添加一个 --version 标志
 
 ## Agent Skills
 
-Skills 是可按需加载的领域知识文档。在 `WORK_DIR/skills/` 目录下放置 `.md` 文件即可：
+Skills 是可按需加载的领域知识文档。在项目根目录的 `skills/` 子目录下放置 `.md` 文件即可：
 
 ```
 your-project/
@@ -205,25 +208,6 @@ Use the `use_skill` tool to load the full content of any skill when needed.
 
 ---
 
-## 飞书 Bot 模式
-
-如需通过飞书使用 Agent，启动时传入 `--feishu` 标志：
-
-```bash
-go run ./cmd/harness9 --feishu
-```
-
-飞书模式额外需要在 `.env` 中配置：
-
-```env
-FEISHU_APP_ID=cli_xxx
-FEISHU_APP_SECRET=xxx
-```
-
-飞书模式详见 [IM 渠道接入详解](im-channel.md)。
-
----
-
 ## 使用示例
 
 ### 代码分析
@@ -260,7 +244,7 @@ harness9> 帮我运行 go test ./... 并分析失败原因
 
 **Q: Agent 无法读取某个文件**
 
-确认文件路径在 `WORK_DIR` 内。Agent 使用相对于 `WORK_DIR` 的路径，绝对路径或 `../` 路径会被拦截。
+确认文件路径在启动目录内。Agent 使用相对路径，绝对路径或 `../` 路径穿越会被拦截。
 
 **Q: 想使用其他模型（如 Claude、OpenRouter）**
 

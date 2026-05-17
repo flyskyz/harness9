@@ -40,7 +40,6 @@ cmd/harness9 (入口)
     │       ├── internal/provider (LLM 调用)
     │       ├── internal/tools (工具注册 + 执行)
     │       └── internal/schema (数据类型)
-    ├── internal/imchannel/feishu (飞书 Bot，--feishu 模式)
     └── internal/env (配置加载)
 ```
 
@@ -52,23 +51,22 @@ cmd/harness9 (入口)
 
 ## 关键数据流
 
-### CLI 模式
+### TUI 模式
+
+```
+用户输入 → RunTUI → eng.RunStream(ctx, prompt)
+    → engine.Event stream → 逐 token 追加到对话视图
+    → ToolCalls → Spinner 动画 + 耗时计数
+    → EventDone → 最终回复渲染到屏幕
+```
+
+### CLI 模式（管道 / CI）
 
 ```
 用户输入 → RunCLI → eng.Run(ctx, prompt)
     → runLoop → LLM Generate
     → ToolCalls → 并发执行 → ToolResults → 继续循环
     → 最终回复打印到 stdout
-```
-
-### 飞书 Bot 模式
-
-```
-飞书消息 → WebSocket → Server.handleMessage
-    → eng.RunStream → engine.Event stream
-    → EventActionDelta → 累积回复文本
-    → EventToolStart/Result → 进度消息推送
-    → EventDone → SendReply(最终回复)
 ```
 
 ## System Prompt 组装

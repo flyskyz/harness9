@@ -1,6 +1,6 @@
 // Package logfmt 提供 harness9 项目内共享的"块状日志"（Block-Style Log）渲染工具。
 //
-// 设计目标：让分散在不同模块（engine、imchannel 等）的日志保持统一的视觉风格 ——
+// 设计目标：让分散在不同模块（engine、provider 等）的日志保持统一的视觉风格 ——
 // 首行单行头部便于 grep，续行以固定缩进对齐形成"信息块"。
 //
 // # 视觉风格示例

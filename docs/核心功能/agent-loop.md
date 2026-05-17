@@ -343,7 +343,7 @@ for i, toolCall := range responseMsg.ToolCalls {
                                             ▼
                                    ┌──────────────────┐
                                    │   客户端消费者     │
-                                   │   (CLI / 飞书 /   │
+                                   │   (TUI / CLI /    │
                                    │    SSE handler)   │
                                    └──────────────────┘
 ```
@@ -638,7 +638,7 @@ Turn 2:
 | 限制 | 当前状态 | 演进方向 |
 |------|---------|---------|
 | **上下文窗口控制** | 无 token 估算和截断，contextHistory 无限增长 | 双层压缩：micro-compact（清除旧工具输出）+ LLM summarize |
-| **流式输出** | 已实现 `RunStream` + `GenerateStream`，支持逐 token delta | 扩展 SSE HTTP 端点，对接飞书等实时推送渠道 |
+| **流式输出** | 已实现 `RunStream` + `GenerateStream`，支持逐 token delta | 扩展 SSE HTTP 端点，对接外部实时推送渠道 |
 | **权限控制** | 无 | 工具执行前统一 PermissionChecker，支持交互式确认 |
 | **Hook 系统** | 无 | PreToolUse / PostToolUse / Stop / TurnComplete 事件钩子 |
 | **多 Agent 编排** | 单 Agent 模式 | 子 Agent 调度、并行 Agent、专用角色 Agent |

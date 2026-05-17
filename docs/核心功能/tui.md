@@ -92,9 +92,7 @@ const asciiArt = `╦ ╦  ╔╦╗  ╔═╗  ╔╗╦  ╔══  ╔══
 `main.go` 通过 `github.com/charmbracelet/x/term` 检测标准输入是否为交互式终端：
 
 ```go
-if *feishuMode {
-    // 飞书 Bot 模式
-} else if term.IsTerminal(os.Stdin.Fd()) {
+if term.IsTerminal(os.Stdin.Fd()) {
     // 交互式终端 → 启动 TUI
     RunTUI(ctx, eng, skillsIndex, workDir, modelName)
 } else {

@@ -1,18 +1,14 @@
 // Command harness9 是 harness9 框架的主入口。
 //
-// 默认以交互式 CLI REPL 模式运行；传入 --feishu 标志则启动飞书 Bot 服务。
+// 在交互式终端（TTY）中运行时自动进入全屏 TUI 模式；
+// 通过管道或 CI 调用时退回交互式 CLI REPL 模式。
+// Agent 的工具沙箱根目录固定为启动时的进程工作目录（cwd）。
 //
 // 环境变量（可通过 .env 文件或系统环境变量提供）：
 //
 //	OPENAI_API_KEY     LLM Provider API Key（必填）
-//	WORK_DIR           Agent 工具的沙箱根目录（默认：进程工作目录）
 //	OPENAI_BASE_URL    自定义 OpenAI 兼容 API 地址（可选）
 //	LLM_MODEL          模型名称（默认：openai/gpt-4o-mini）
-//
-// 飞书模式额外需要：
-//
-//	FEISHU_APP_ID      飞书应用 App ID
-//	FEISHU_APP_SECRET  飞书应用 App Secret
 package main
 
 import (
@@ -30,7 +26,6 @@ import (
 	harctx "github.com/harness9/internal/context"
 	"github.com/harness9/internal/engine"
 	"github.com/harness9/internal/env"
-	"github.com/harness9/internal/imchannel/feishu"
 	"github.com/harness9/internal/logfmt"
 	"github.com/harness9/internal/provider"
 	"github.com/harness9/internal/skills"
@@ -42,7 +37,6 @@ var version = "dev"
 
 func main() {
 	versionMode := flag.Bool("version", false, "打印版本号并退出")
-	feishuMode := flag.Bool("feishu", false, "启动飞书 Bot 模式（需配置 FEISHU_APP_ID / FEISHU_APP_SECRET）")
 	flag.Parse()
 
 	if *versionMode {
@@ -59,10 +53,7 @@ func main() {
 		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("加载环境配置失败: %v", err)))
 	}
 
-	workDir := os.Getenv("WORK_DIR")
-	if workDir == "" {
-		workDir = cwd
-	}
+	workDir := cwd
 
 	// 加载 Skills（workdir/skills/，目录不存在时静默返回空 Index）
 	skillsIndex, err := skills.LoadSkills(filepath.Join(workDir, "skills"))
@@ -102,19 +93,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if *feishuMode {
-		appID := os.Getenv("FEISHU_APP_ID")
-		appSecret := os.Getenv("FEISHU_APP_SECRET")
-		if appID == "" || appSecret == "" {
-			log.Fatal(logfmt.FormatMsg("main", "缺少飞书配置：FEISHU_APP_ID 或 FEISHU_APP_SECRET 未设置"))
-		}
-		log.Print(logfmt.FormatMsg("main", fmt.Sprintf("harness9 飞书 Bot 启动 │ workDir=%s appID=%s", workDir, appID)))
-		ch := feishu.NewChannel(appID, appSecret)
-		srv := NewServer(ch, eng)
-		if err := srv.Start(ctx); err != nil {
-			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("Server 退出: %v", err)))
-		}
-	} else if term.IsTerminal(os.Stdin.Fd()) {
+	if term.IsTerminal(os.Stdin.Fd()) {
 		log.Print(logfmt.FormatMsg("main", fmt.Sprintf("harness9 TUI 启动 │ workDir=%s", workDir)))
 		if err := RunTUI(ctx, eng, skillsIndex, workDir, modelName); err != nil {
 			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("TUI 退出: %v", err)))
