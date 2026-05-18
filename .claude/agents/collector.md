@@ -25,8 +25,8 @@ model: sonnet
 |------|-----|----------|----------|
 | GitHub Trending | https://github.com/trending | 当日趋势仓库，关注 AI/LLM/Agent 相关 | Star > 100 且最近 10 天内有更新，取 top 10 |
 | Hacker News | https://news.ycombinator.com | 首页热门，筛选 AI/ML 相关帖子 | 扫描首页 30 条（含非 AI），筛选后 AI 相关按实输出 |
-| Anthropic Engineering | https://www.anthropic.com/engineering | Anthropic 技术博客文章 | 取最近 30 天内的文章 |
-| LangChain Blog (RSS) | https://www.langchain.com/blog/rss.xml | LangChain 生态技术文章（通过 RSS 获取日期精确过滤） | 取最近 30 天内的文章 |
+| Anthropic Engineering | https://www.anthropic.com/engineering | Anthropic 技术博客文章 | 取最近 7 天内的文章 |
+| LangChain Blog (RSS) | https://www.langchain.com/blog/rss.xml | LangChain 生态技术文章（通过 RSS 获取日期精确过滤） | 取最近 7 天内的文章 |
 | LangChain Blog (页面) | https://www.langchain.com/blog | LangChain 生态技术文章（获取标题和摘要） | 与 RSS 结果按 URL 匹配 |
 
 ## 工作职责
@@ -59,7 +59,7 @@ model: sonnet
 | `title` | string | 条目标题（原文语言） |
 | `url` | string | 原文链接 |
 | `source` | string | 来源标识：`github_trending` / `hacker_news` / `anthropic_engineering` / `langchain_blog` |
-| `popularity` | number | GitHub: stars 数；HN: points 数；博客: 最近 30 天内天数衰减值（30 - days_ago, 最小 1） |
+| `popularity` | number | GitHub: stars 数；HN: points 数；博客: 最近 7 天内天数衰减值（7 - days_ago, 最小 1） |
 | `summary` | string | 中文摘要，1-3 句话概括核心内容 |
 | `collected_at` | string (ISO 8601) | 采集时间 |
 
@@ -82,7 +82,7 @@ model: sonnet
         若 URL 不匹配：以 RSS 的标题和日期为准，优先使用页面摘要
 
 2. 日期过滤（仅博客来源）：
-   ├─ 设定采集窗口: 过去 30 天（含当天）
+   ├─ 设定采集窗口: 过去 7 天（含当天）
    ├─ 解析 Anthropic 页面的发布日期文本
    ├─ 解析 LangChain RSS 的 pubDate 字段
    └─ 跳过窗口外的文章
@@ -125,8 +125,8 @@ knowledge/raw/{YYYYMMDD}/
 - [ ] GitHub Trending 若当日 AI 相关高星仓库不足 10 条，按实际数量如实输出（不编造、不补位）
 - [ ] 每项 GitHub 条目均满足 Star > 100 且 10 天内有更新
 - [ ] Hacker News 已扫描首页 30 条帖子（含非 AI），筛选后 AI 相关条目按实输出
-- [ ] Anthropic Engineering 文章均为最近 30 天内发布
-- [ ] LangChain Blog 文章均为最近 30 天内发布
+- [ ] Anthropic Engineering 文章均为最近 7 天内发布
+- [ ] LangChain Blog 文章均为最近 7 天内发布
 - [ ] 条目总数 >= 15 条
 - [ ] 每条记录均包含 title / url / source / popularity / summary / collected_at 六个字段
 - [ ] collected_at 为 ISO 8601 格式的 UTC 时间

@@ -1,0 +1,58 @@
+[
+  {
+    "title": "microsoft/ai-agents-for-beginners",
+    "url": "https://github.com/microsoft/ai-agents-for-beginners",
+    "source": "github_trending",
+    "popularity": 63021,
+    "summary": "微软出品的 AI Agent 入门课程，包含 12 节课，系统讲解如何构建 AI Agent，面向初学者，配有 Jupyter Notebook 教程。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "HKUDS/CLI-Anything",
+    "url": "https://github.com/HKUDS/CLI-Anything",
+    "source": "github_trending",
+    "popularity": 36216,
+    "summary": "让所有软件具备 Agent 原生能力的 CLI Hub，将传统软件接口封装为 Agent 可直接调用的工具，推动 Agent-Native 软件生态建设。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "K-Dense-AI/scientific-agent-skills",
+    "url": "https://github.com/K-Dense-AI/scientific-agent-skills",
+    "source": "github_trending",
+    "popularity": 24092,
+    "summary": "面向科研、工程与数据分析场景的 Agent Skills 合集，提供即用型工具技能，可直接集成到 AI Agent 中完成科学计算任务。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "NirDiamant/agents-towards-production",
+    "url": "https://github.com/NirDiamant/agents-towards-production",
+    "source": "github_trending",
+    "popularity": 20123,
+    "summary": "面向生产级 Generative AI Agent 构建的系列教程，涵盖从原型到部署的完整流程，以 Jupyter Notebook 形式呈现。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "Anil-matcha/Open-Generative-AI",
+    "url": "https://github.com/Anil-matcha/Open-Generative-AI",
+    "source": "github_trending",
+    "popularity": 15554,
+    "summary": "开源的 AI 图像与视频生成平台，集成 200 余个模型，提供类似 Midjourney 等商业产品的功能替代方案。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "tinyhumansai/openhuman",
+    "url": "https://github.com/tinyhumansai/openhuman",
+    "source": "github_trending",
+    "popularity": 15184,
+    "summary": "私有、简洁且极具能力的个人 AI 超级智能项目，用 Rust 构建，定位为本地化运行的个人 AI 助手。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "tech-leads-club/agent-skills",
+    "url": "https://github.com/tech-leads-club/agent-skills",
+    "source": "github_trending",
+    "popularity": 3772,
+    "summary": "面向专业 AI 编码 Agent 的安全校验技能注册表，提供经过验证的标准化 Agent 技能供生产环境使用。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  }
+]
