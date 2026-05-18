@@ -115,3 +115,26 @@ func TestParseLine(t *testing.T) {
 		}
 	}
 }
+
+// TestLoad_DoesNotOverrideEmptyString 验证手动设置为空字符串的环境变量不会被 .env 文件覆盖。
+// 这区分了"变量未定义"与"变量被显式设置为空字符串"两种情况。
+func TestLoad_DoesNotOverrideEmptyString(t *testing.T) {
+	os.Setenv("EMPTY_SYSTEM_KEY", "")
+	defer os.Unsetenv("EMPTY_SYSTEM_KEY")
+
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+	content := "EMPTY_SYSTEM_KEY=file_value\n"
+
+	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Load(envFile); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if got := os.Getenv("EMPTY_SYSTEM_KEY"); got != "" {
+		t.Errorf("expected empty string (system value), got %q", got)
+	}
+}
