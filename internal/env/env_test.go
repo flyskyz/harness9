@@ -60,7 +60,9 @@ func TestLoad_FileNotFound(t *testing.T) {
 // TestLoad_DoesNotOverride 验证已存在的系统环境变量不会被 .env 文件覆盖。
 // 这确保了"系统环境变量 > .env 文件"的优先级策略。
 func TestLoad_DoesNotOverride(t *testing.T) {
-	os.Setenv("EXISTING_KEY", "system_value")
+	if err := os.Setenv("EXISTING_KEY", "system_value"); err != nil {
+		t.Fatalf("setup: setenv: %v", err)
+	}
 	defer os.Unsetenv("EXISTING_KEY")
 
 	dir := t.TempDir()
@@ -113,5 +115,30 @@ func TestParseLine(t *testing.T) {
 				t.Errorf("parseLine(%q) = (%q, %q), want (%q, %q)", tt.line, key, value, tt.key, tt.value)
 			}
 		}
+	}
+}
+
+// TestLoad_DoesNotOverrideEmptyString 验证手动设置为空字符串的环境变量不会被 .env 文件覆盖。
+// 这区分了"变量未定义"与"变量被显式设置为空字符串"两种情况。
+func TestLoad_DoesNotOverrideEmptyString(t *testing.T) {
+	if err := os.Setenv("EMPTY_SYSTEM_KEY", ""); err != nil {
+		t.Fatalf("setup: setenv: %v", err)
+	}
+	defer os.Unsetenv("EMPTY_SYSTEM_KEY")
+
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+	content := "EMPTY_SYSTEM_KEY=file_value\n"
+
+	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Load(envFile); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if got := os.Getenv("EMPTY_SYSTEM_KEY"); got != "" {
+		t.Errorf("expected empty string (system value), got %q", got)
 	}
 }

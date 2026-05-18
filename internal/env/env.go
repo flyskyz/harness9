@@ -1,6 +1,6 @@
 // Package env 提供基于 .env 文件的环境变量配置加载能力。
 // 在程序启动时调用 Load 即可从项目根目录的 .env 文件读取键值对并注入到进程环境变量中，
-// 已存在的环境变量不会被覆盖（优先使用系统环境变量）。
+// 只有在进程环境中完全未定义的变量才会被设置；已存在的变量（包括值为空字符串的变量）不会被覆盖。
 //
 // 配置文件格式：
 //
@@ -19,7 +19,7 @@ import (
 )
 
 // Load 从指定路径的 .env 文件读取配置并设置为环境变量。
-// 已存在的环境变量不会被覆盖，允许通过系统环境变量覆盖 .env 文件中的值。
+// 只有在进程环境中完全未定义的变量才会被设置；已存在的变量（包括值为空字符串的变量）不会被覆盖。
 // 如果文件不存在，返回 nil（非错误），使程序可以在没有 .env 文件时仍正常运行。
 func Load(filePath string) error {
 	f, err := os.Open(filePath)
@@ -46,7 +46,7 @@ func Load(filePath string) error {
 			continue
 		}
 
-		if os.Getenv(key) == "" {
+		if _, exists := os.LookupEnv(key); !exists {
 			if err := os.Setenv(key, value); err != nil {
 				return fmt.Errorf("set env %s at line %d: %w", key, lineNum, err)
 			}
