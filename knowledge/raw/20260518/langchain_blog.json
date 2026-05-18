@@ -1,0 +1,98 @@
+[
+  {
+    "title": "Introducing LangChain Labs",
+    "url": "https://www.langchain.com/blog/introducing-langchain-labs",
+    "source": "langchain_blog",
+    "popularity": 4,
+    "summary": "LangChain 宣布成立 Labs 应用研究部门，专注于 Agent 持续学习研究，探索让 Agent 在使用中不断自我改进的技术路径。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "Everything we shipped at Interrupt",
+    "url": "https://www.langchain.com/blog/interrupt-2026-overview",
+    "source": "langchain_blog",
+    "popularity": 4,
+    "summary": "Interrupt 2026 大会发布综述，涵盖 Agent 自主调试部署、LangSmith Engine、SmithDB、Context Hub 等多项新功能与产品发布。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "LangSmith LLM Gateway: runtime governance built into the agent lifecycle",
+    "url": "https://www.langchain.com/blog/introducing-llm-gateway",
+    "source": "langchain_blog",
+    "popularity": 4,
+    "summary": "LangSmith 推出 LLM Gateway，在 Agent 生命周期中内置运行时治理能力，支持消费限额、PII 脱敏和追踪链路连续性。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "Introducing Langsmith Engine",
+    "url": "https://www.langchain.com/blog/introducing-langsmith-engine",
+    "source": "langchain_blog",
+    "popularity": 3,
+    "summary": "LangSmith Engine 上线，为生产 Agent 系统提供自动故障聚类与针对性修复建议，大幅降低 Agent 问题排查成本。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "We built SmithDB, the data layer for agent observability",
+    "url": "https://www.langchain.com/blog/introducing-smithdb",
+    "source": "langchain_blog",
+    "popularity": 3,
+    "summary": "LangSmith 推出专为 Agent 可观测性设计的分布式数据库 SmithDB，显著提升追踪数据的写入与查询性能。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "Introducing LangSmith Context Hub",
+    "url": "https://www.langchain.com/blog/introducing-context-hub",
+    "source": "langchain_blog",
+    "popularity": 2,
+    "summary": "LangSmith Context Hub 提供集中化文件存储，支持 Agent 行为配置的版本管理，实现上下文工程资产的统一管理与复用。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "LangSmith Sandboxes are Generally Available",
+    "url": "https://www.langchain.com/blog/langsmith-sandboxes-generally-available",
+    "source": "langchain_blog",
+    "popularity": 2,
+    "summary": "LangSmith Sandboxes 正式 GA，提供内核隔离的 microVM 环境，支持快照、并行 fork、服务 URL 和认证代理，为 Agent 代码执行提供安全隔离。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "Managed Deep Agents: the fastest way to ship a production deep agent",
+    "url": "https://www.langchain.com/blog/introducing-managed-deep-agents",
+    "source": "langchain_blog",
+    "popularity": 2,
+    "summary": "LangChain 推出托管式 Deep Agent 服务，提供生产就绪的 Agent 部署基础设施管理，目前处于私有测试阶段。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "New in Deep Agents v0.6",
+    "url": "https://www.langchain.com/blog/deep-agents-0-6",
+    "source": "langchain_blog",
+    "popularity": 2,
+    "summary": "Deep Agents v0.6 版本发布，新增代码解释器、Harness 配置文件、Streaming v3、Delta Channels 和 ContextHub 等重要特性。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "The Anatomy of an Agent Harness",
+    "url": "https://www.langchain.com/blog/the-anatomy-of-an-agent-harness",
+    "source": "langchain_blog",
+    "popularity": 3,
+    "summary": "深入解析 Agent Harness 的结构组成，阐述 Harness 如何将 AI 模型转化为能够执行自主工作的引擎，覆盖核心架构设计决策。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "The agent development lifecycle",
+    "url": "https://www.langchain.com/blog/the-agent-development-lifecycle",
+    "source": "langchain_blog",
+    "popularity": 3,
+    "summary": "Harrison Chase 系统梳理 Agent 开发生命周期的各阶段，从原型设计到生产部署，为工程团队提供 Agent 工程化落地的方法论框架。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  },
+  {
+    "title": "Delta Channels: How We're Evolving our Runtime for Long-Running Agents",
+    "url": "https://www.langchain.com/blog/delta-channels-evolving-agent-runtime",
+    "source": "langchain_blog",
+    "popularity": 1,
+    "summary": "介绍 Delta Channels 增量检查点机制，通过存储状态变化量而非全量快照，大幅提升长时运行 Agent 的性能与可靠性。",
+    "collected_at": "2026-05-18T08:00:00Z"
+  }
+]

@@ -1,0 +1,83 @@
+[
+  {
+    "title": "Show HN: Semble – Code search for agents that uses 98% fewer tokens than grep",
+    "url": "https://github.com/MinishLab/semble",
+    "source": "hacker_news",
+    "popularity": 334,
+    "summary": "Semble 是专为 AI Agent 设计的代码搜索工具，相比传统 grep 减少 98% 的 token 消耗，通过语义索引提升 Agent 代码导航效率。",
+    "collected_at": "2026-05-18T08:00:00Z",
+    "highlights": [
+      "相比传统 grep，token 消耗减少 98%，大幅降低 Agent 代码搜索的上下文开销",
+      "采用语义索引而非关键字匹配，提升 Agent 在大型代码库中的导航精度",
+      "专为 AI Agent 场景设计，是 Agent 工具生态中少见的代码搜索专项优化",
+      "token 效率的极大提升直接影响 Agent 的 context window 利用率，降低 LLM 调用成本",
+      "对 harness9 等框架的内置工具系统有直接的参考与集成价值"
+    ],
+    "importance_score": 8,
+    "importance_label": "🔧 直接有帮助",
+    "suggested_tags": ["AI Agent", "代码搜索", "Token效率", "语义索引", "工具优化", "上下文管理"],
+    "deep_summary": "Semble 针对 AI Agent 代码导航场景进行了专项优化，通过语义索引替代传统 grep 的关键字匹配，实现了 98% 的 token 消耗削减。在 Agent 系统中，代码搜索工具的 token 消耗直接影响上下文窗口的使用效率和 LLM 调用成本，Semble 的极致 token 压缩对长任务 Agent 尤为重要。语义检索相比关键字搜索能够更好地理解代码意图，提升搜索结果的相关性。该工具代表了 Agent 专属基础工具优化的重要方向，值得关注和集成测试。",
+    "analyzed_at": "2026-05-18T09:00:00Z",
+    "raw_files": ["knowledge/raw/20260518/hacker_news.json"]
+  },
+  {
+    "title": "GenCAD",
+    "url": "https://gencad.github.io/",
+    "source": "hacker_news",
+    "popularity": 327,
+    "summary": "MIT 研究团队开发的生成式 AI CAD 模型，能从 2D 图像生成参数化 CAD 命令序列并转换为可编辑的 3D 实体模型，结合 Transformer、对比学习与潜在扩散模型。",
+    "collected_at": "2026-05-18T08:00:00Z",
+    "highlights": [
+      "MIT 研究成果，从 2D 图像直接生成参数化 CAD 命令序列，实现图像到可编辑 3D 模型的端到端转换",
+      "综合运用 Transformer、对比学习与潜在扩散模型三类技术，技术深度突出",
+      "输出为参数化 CAD 命令而非静态 3D 网格，生成结果可在 CAD 软件中直接二次编辑",
+      "打通了 AI 生成与工程设计工作流的关键断点，具有重要的工业应用潜力",
+      "代表 AI 在专业工程领域渗透的重要进展，超越了通用图像/视频生成的范畴"
+    ],
+    "importance_score": 7,
+    "importance_label": "🔧 直接有帮助",
+    "suggested_tags": ["生成式AI", "CAD", "3D生成", "Transformer", "扩散模型", "工业AI"],
+    "deep_summary": "GenCAD 是 MIT 研究团队开发的生成式 CAD 系统，核心创新在于将 2D 图像转化为参数化 CAD 命令序列，最终输出可在专业 CAD 软件中编辑的 3D 实体模型。与现有 3D 生成方法输出静态网格不同，GenCAD 的参数化输出保留了工程意义，直接对接设计师的实际工作流。技术上融合了 Transformer 序列建模、对比学习和潜在扩散模型，兼顾了语义理解与生成质量。该研究代表 AI 深入工程设计专业领域的重要突破，对工业软件与 AI 融合具有示范价值。",
+    "analyzed_at": "2026-05-18T09:00:00Z",
+    "raw_files": ["knowledge/raw/20260518/hacker_news.json"]
+  },
+  {
+    "title": "I don't think AI will make your processes go faster",
+    "url": "https://frederickvanbrabant.com/blog/2026-05-15-i-dont-think-ai-will-make-your-processes-go-faster",
+    "source": "hacker_news",
+    "popularity": 598,
+    "summary": "作者认为 AI 并不会自动加速现有业务流程，而是更适合用于探索新方向。文章引发广泛讨论，探讨 AI 在企业中的实际价值定位。",
+    "collected_at": "2026-05-18T08:00:00Z",
+    "highlights": [
+      "挑战主流叙事：AI 的核心价值不在于加速既有流程，而在于探索新的可能性",
+      "引发 HN 热门讨论（598 热度），说明该观点在工程师群体中引起强烈共鸣",
+      "提供了反思 AI ROI 评估框架的重要视角，有助于企业重新定位 AI 投入方向",
+      "对 Agent 的价值定位有启发：Agent 的价值更多在于开拓新任务而非替换旧任务"
+    ],
+    "importance_score": 6,
+    "importance_label": "📖 值得了解",
+    "suggested_tags": ["AI战略", "企业AI", "流程优化", "AI价值", "观点讨论"],
+    "deep_summary": "该文章提出了一个反直觉但值得深思的观点：AI 的真正价值并不在于让现有流程跑得更快，而在于使组织能够探索原本无法触及的新方向。文章引发了 HN 社区的广泛讨论，反映出工程师和管理者对 AI ROI 评估方式的普遍困惑。这一视角对 Agent 的产品定位有重要启示——Agent 更应被视为能力扩展器而非效率提升器。对于正在规划 AI 落地策略的团队，该文章提供了一个值得纳入决策框架的思考维度。",
+    "analyzed_at": "2026-05-18T09:00:00Z",
+    "raw_files": ["knowledge/raw/20260518/hacker_news.json"]
+  },
+  {
+    "title": "CUDA Books",
+    "url": "https://github.com/alternbits/awesome-cuda-books",
+    "source": "hacker_news",
+    "popularity": 198,
+    "summary": "精选 CUDA 编程书籍资源列表，涵盖 GPU 并行计算核心知识，是 AI/ML 工程师提升底层 GPU 编程能力的参考资料集合。",
+    "collected_at": "2026-05-18T08:00:00Z",
+    "highlights": [
+      "精选 CUDA 编程书单，覆盖 GPU 并行计算从入门到进阶的核心知识体系",
+      "对需要深入理解 AI 训练与推理底层性能的工程师有参考价值",
+      "资源列表形式，便于快速筛选适合自身水平的学习材料"
+    ],
+    "importance_score": 4,
+    "importance_label": "👀 可略过",
+    "suggested_tags": ["CUDA", "GPU编程", "并行计算", "学习资源", "ML基础"],
+    "deep_summary": "awesome-cuda-books 是一份精选的 CUDA 编程书目清单，汇集了 GPU 并行计算领域的核心参考资料。该资源对深入理解 AI 训练和推理底层性能的工程师有一定参考价值，但本质上是资源索引而非新技术或新方法论的发布。对于专注于 Agent 编排和框架设计的工程师，直接相关性相对有限，可按需收藏备用。",
+    "analyzed_at": "2026-05-18T09:00:00Z",
+    "raw_files": ["knowledge/raw/20260518/hacker_news.json"]
+  }
+]
