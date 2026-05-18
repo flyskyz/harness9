@@ -261,10 +261,10 @@ go run ./cmd/harness9
 
 ### 配置说明
 
-harness9 启动时优先读取**工作目录（work_dir）**下的 `.env` 文件加载环境变量。  
+harness9 启动时优先读取**工作目录（即执行 `harness9` 命令时所在的目录）**下的 `.env` 文件加载环境变量。  
 如果同名变量已通过 `export` 或 shell 配置文件手动设置，**手动设置的值始终优先**，`.env` 文件不会覆盖它。
 
-**优先级：** `export VAR=value`（手动设置）> `work_dir/.env` 文件
+**优先级：** `export VAR=value` > `work_dir/.env` 文件
 
 `.env` 文件示例：
 
@@ -277,6 +277,8 @@ LLM_MODEL=openai/gpt-4o-mini
 # 可选：使用 OpenRouter 或其他兼容 API
 # OPENAI_BASE_URL=https://openrouter.ai/api/v1
 ```
+
+> **注意：** `.env` 文件包含 API Key 等敏感信息，建议将其加入 `.gitignore`，避免提交到代码仓库。
 
 > **提示：** 将 `export OPENAI_API_KEY="sk-..."` 写入 `~/.zshrc` 或 `~/.bashrc` 即可跨项目全局生效，无需在每个项目目录放置 `.env`。
 
