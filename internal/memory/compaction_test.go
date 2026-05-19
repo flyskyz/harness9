@@ -161,7 +161,7 @@ func TestTokenBudgetCompactor_NoCompactionNeeded(t *testing.T) {
 func TestTokenBudgetCompactor_CompactsOldMessages(t *testing.T) {
 	// Budget: 100 tokens = 400 chars.
 	// system (3 chars) + 2 old messages (400 chars each) + 2 recent (short) > budget.
-	c := memory.NewTokenBudgetCompactor(125) // MaxTokens = 100
+	c := &memory.TokenBudgetCompactor{MaxTokens: 100, MinTailMessages: 2}
 	input := []schema.Message{
 		{Role: schema.RoleSystem, Content: "sys"},
 		{Role: schema.RoleUser, Content: longContent(400)},
