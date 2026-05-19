@@ -114,10 +114,14 @@ func main() {
 		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("创建会话失败: %v", err)))
 	}
 
+	modelLimits := provider.GetModelLimits(modelName)
+	compactor := memory.NewTokenBudgetCompactor(modelLimits.ContextTokens)
+
 	eng := engine.NewAgentEngine(llm, registry, workDir,
 		engine.WithPromptBuilder(promptBuilder),
 		engine.WithSession(sess),
-		engine.WithCompactor(&memory.SlidingWindowCompactor{MaxMessages: 100}),
+		engine.WithCompactor(compactor),
+		engine.WithContextWindow(modelLimits.ContextTokens),
 	)
 
 	if term.IsTerminal(os.Stdin.Fd()) {
