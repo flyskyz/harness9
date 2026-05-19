@@ -81,16 +81,21 @@ Context Engineering 模块覆盖以下能力：
 
 ```
 internal/memory/
-├── session.go          # Session 接口 + SessionInfo 类型定义
-├── manager.go          # Manager：SQLite 连接持有者 + 会话 CRUD
-├── sqlite_session.go   # SQLiteSession：SQLite 持久化实现
-├── mem_session.go      # MemorySession：纯内存实现（测试用）
-├── compaction.go       # Compactor 接口 + 两种压缩实现
-├── token.go            # Token 估算工具函数
-└── token_test.go
+├── session.go               # Session 接口 + SessionInfo 类型定义
+├── manager.go               # Manager：SQLite 连接持有者 + 会话 CRUD
+├── sqlite_session.go        # SQLiteSession：WAL 模式 SQLite 持久化实现
+├── mem_session.go           # MemorySession：纯内存实现（测试用）
+├── compaction.go            # Compactor 接口 + TokenBudgetCompactor + SlidingWindowCompactor
+├── summarization.go         # SummarizationCompactor：LLM 摘要压缩（默认策略）
+├── token.go                 # Token 估算工具函数
+├── sqlite_session_test.go
+├── mem_session_test.go
+├── manager_test.go
+├── compaction_test.go
+└── summarization_test.go
 
 internal/provider/
-├── model_limits.go     # 模型 context window 注册表
+├── model_limits.go          # 模型 context window 注册表
 └── model_limits_test.go
 ```
 
@@ -214,62 +219,15 @@ COMMIT
 
 ## 6. 压缩策略
 
-### 6.1 SlidingWindowCompactor（按消息条数）
+harness9 提供三种压缩策略，按优先级从高到低排列：
 
-配置：`MaxMessages int`（默认 100，含 system prompt）
+| 策略 | 文件 | 默认 | 适用场景 |
+|------|------|:----:|---------|
+| `SummarizationCompactor` | `summarization.go` | ✅ | 长任务、信息密集型对话，语义保留最佳 |
+| `TokenBudgetCompactor` | `compaction.go` | — | Provider 不可用时的自动回退策略 |
+| `SlidingWindowCompactor` | `compaction.go` | — | 快速原型、成本极度敏感场景 |
 
-```
-输入：msgs = [system, msg1, msg2, ..., msgN]
-
-1. 若 len(msgs) ≤ MaxMessages，直接返回原切片（无需压缩）
-2. 计算窗口起点：startIdx = len(msgs) - MaxMessages + 1
-3. 【边界修正】向前回溯孤立的 Observation：
-   while startIdx > 1 AND msgs[startIdx].ToolCallID != "" {
-       startIdx--
-   }
-4. 返回：[msgs[0]] + msgs[startIdx:]
-```
-
-`SlidingWindowCompactor` 是简单回退方案，不感知 token 用量，适合快速原型场景。
-
-### 6.2 TokenBudgetCompactor（Token Budget 感知，默认）
-
-配置：
-- `MaxTokens int` — 最大允许 token 数（通常为 `contextWindow × 80%`）
-- `MinTailMessages int` — 尾部强制保留的最少消息条数（默认 6，保证对话连贯性）
-
-```go
-func NewTokenBudgetCompactor(contextWindow int) *TokenBudgetCompactor {
-    return &TokenBudgetCompactor{
-        MaxTokens:       contextWindow * 80 / 100,
-        MinTailMessages: 6,
-    }
-}
-```
-
-**压缩算法：**
-
-```
-输入：msgs = [system, msg1, ..., msgN]
-非 system 消息数 = nonSystemCount = len(msgs) - 1（跳过 msgs[0]）
-
-1. 若 nonSystemCount ≤ MinTailMessages，直接返回（保护最小尾部）
-2. 估算总 token 数 = EstimateTokens(msgs)
-3. 若 totalTokens ≤ MaxTokens，直接返回（未超预算）
-4. 二分搜索：找最大的 tailLen ∈ [MinTailMessages, nonSystemCount-1]，
-   使得 EstimateTokens([system] + msgs[N-tailLen:]) ≤ MaxTokens
-5. 取最终 tail = msgs[len-tailLen:]
-6. 修复孤立工具对：repairOrphanedToolPairs([system] + tail)
-7. 返回修复后的消息列表
-```
-
-**为何用 80% 而非 100%？**
-
-- 保留 20% 余量给工具定义（bash/read_file 工具描述可消耗 10-30K tokens）
-- 避免因估算误差（char÷4 是近似值）导致 API 超限
-- 给 LLM 生成输出保留空间
-
-### 6.3 SummarizationCompactor（LLM 摘要压缩）
+### 6.1 SummarizationCompactor（LLM 摘要压缩，默认）
 
 `SummarizationCompactor` 调用 LLM 将旧消息压缩为结构化摘要，在语义保留方面显著优于截断策略。
 
@@ -337,6 +295,61 @@ New conversation to merge:
 | 成本 | 零 | 摘要 API 费用 |
 | 可用性 | 始终可用 | 依赖 Provider 可用性 |
 | 推荐场景 | 快速原型、成本敏感 | 长任务、信息密集型对话 |
+
+### 6.2 TokenBudgetCompactor（Token Budget 感知，回退策略）
+
+配置：
+- `MaxTokens int` — 最大允许 token 数（通常为 `contextWindow × 80%`）
+- `MinTailMessages int` — 尾部强制保留的最少消息条数（默认 6，保证对话连贯性）
+
+```go
+func NewTokenBudgetCompactor(contextWindow int) *TokenBudgetCompactor {
+    return &TokenBudgetCompactor{
+        MaxTokens:       contextWindow * 80 / 100,
+        MinTailMessages: 6,
+    }
+}
+```
+
+**压缩算法：**
+
+```
+输入：msgs = [system, msg1, ..., msgN]
+非 system 消息数 = nonSystemCount = len(msgs) - 1（跳过 msgs[0]）
+
+1. 若 nonSystemCount ≤ MinTailMessages，直接返回（保护最小尾部）
+2. 估算总 token 数 = EstimateTokens(msgs)
+3. 若 totalTokens ≤ MaxTokens，直接返回（未超预算）
+4. 二分搜索：找最大的 tailLen ∈ [MinTailMessages, nonSystemCount-1]，
+   使得 EstimateTokens([system] + msgs[N-tailLen:]) ≤ MaxTokens
+5. 取最终 tail = msgs[len-tailLen:]
+6. 修复孤立工具对：repairOrphanedToolPairs([system] + tail)
+7. 返回修复后的消息列表
+```
+
+**为何用 80% 而非 100%？**
+
+- 保留 20% 余量给工具定义（bash/read_file 工具描述可消耗 10-30K tokens）
+- 避免因估算误差（char÷4 是近似值）导致 API 超限
+- 给 LLM 生成输出保留空间
+
+### 6.3 SlidingWindowCompactor（按消息条数，简单回退）
+
+配置：`MaxMessages int`（默认 100，含 system prompt）
+
+```
+输入：msgs = [system, msg1, msg2, ..., msgN]
+
+1. 若 len(msgs) ≤ MaxMessages，直接返回原切片（无需压缩）
+2. 计算窗口起点：startIdx = len(msgs) - MaxMessages + 1
+3. 【边界修正】向前回溯孤立的 Observation：
+   while startIdx > 1 AND msgs[startIdx].ToolCallID != "" {
+       startIdx--
+   }
+4. 返回：[msgs[0]] + msgs[startIdx:]
+```
+
+`SlidingWindowCompactor` 不感知 token 用量，适合快速原型场景，生产环境推荐使用 `SummarizationCompactor`。
 
 ### 6.4 孤立工具对修复（repairOrphanedToolPairs）
 
