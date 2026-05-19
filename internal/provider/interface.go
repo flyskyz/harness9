@@ -22,7 +22,7 @@ import (
 // 两个方法共享相同的消息转换逻辑（convertMessages / convertTools），
 // 只是底层 SDK 调用方式不同（New vs NewStreaming）。
 type LLMProvider interface {
-	// Generate 将对话历史和可用工具定义发送给 LLM，返回模型的完整响应 Message。
+	// Generate 将对话历史和可用工具定义发送给 LLM，返回模型的完整响应 Message 和 token 用量。
 	//
 	// 参数:
 	//   - ctx: 控制底层 HTTP 调用的取消和超时
@@ -32,8 +32,8 @@ type LLMProvider interface {
 	//     传入 nil 剥夺所有工具（Phase 1 Thinking），传入非空恢复工具（Phase 2 Action）
 	//
 	// 返回的 Message 中 ToolCalls 字段在模型决定调用工具时填充；否则 Content 包含
-	// 最终文本回复，agent loop 终止。
-	Generate(ctx context.Context, messages []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, error)
+	// 最终文本回复，agent loop 终止。Usage 包含本次调用的实际 token 用量（可能为 nil）。
+	Generate(ctx context.Context, messages []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error)
 
 	// GenerateStream 以流式方式调用 LLM，通过 channel 逐 chunk 返回响应增量。
 	//

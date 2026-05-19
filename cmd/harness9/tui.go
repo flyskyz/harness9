@@ -48,6 +48,11 @@ var (
 	cyanStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
 	brandStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true)
 	sepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
+
+	// token 使用率颜色（绿/黄/红，按使用量变化）
+	tokenOKStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // < 50%: 绿
+	tokenWarnStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // 50-80%: 黄
+	tokenHighStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // > 80%: 红
 )
 
 type tuiPhase int
@@ -114,10 +119,13 @@ type tuiModel struct {
 	running     bool
 
 	// Session 管理
-	manager         *memory.Manager
-	session         memory.Session
-	sessionID       string // 完整 session ID，用于状态栏
-	sessionMsgCount int
+	manager   *memory.Manager
+	session   memory.Session
+	sessionID string // 完整 session ID，用于状态栏
+
+	// Context token 跟踪（由 EventTokenUpdate 更新）
+	contextTokens int // 当前估算 context token 数
+	contextWindow int // 模型 context window（0 表示未知）
 
 	// /resume 选择模式
 	resumeSelecting bool

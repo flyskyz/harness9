@@ -48,12 +48,12 @@ func NewOpenAIProvider(model string) (*OpenAIProvider, error) {
 
 // Generate 实现 LLMProvider 接口的阻塞式调用。
 // 通过共享的 convertMessages / convertTools 完成类型转换后，
-// 调用 OpenAI SDK 的 Chat Completions API 获取完整响应。
-func (p *OpenAIProvider) Generate(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, error) {
+// 调用 OpenAI SDK 的 Chat Completions API 获取完整响应，并提取实际 token 用量。
+func (p *OpenAIProvider) Generate(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
 	openaiMsgs := p.convertMessages(msgs)
 	openaiTools, err := p.convertTools(availableTools)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	reqParams := openai.ChatCompletionNewParams{
@@ -66,18 +66,23 @@ func (p *OpenAIProvider) Generate(ctx context.Context, msgs []schema.Message, av
 
 	resp, err := p.client.Chat.Completions.New(ctx, reqParams)
 	if err != nil {
-		return nil, fmt.Errorf("OpenAI 兼容 API 请求失败: %w", err)
+		return nil, nil, fmt.Errorf("OpenAI 兼容 API 请求失败: %w", err)
 	}
 	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("OpenAI 兼容 API 返回了空的 Choices")
+		return nil, nil, fmt.Errorf("OpenAI 兼容 API 返回了空的 Choices")
 	}
 
-	return p.extractMessage(resp.Choices[0].Message), nil
+	usage := &schema.Usage{
+		InputTokens:  int(resp.Usage.PromptTokens),
+		OutputTokens: int(resp.Usage.CompletionTokens),
+	}
+	return p.extractMessage(resp.Choices[0].Message), usage, nil
 }
 
 // GenerateStream 实现 LLMProvider 接口的流式调用。
 // 在独立 goroutine 中迭代 SDK 流，文本增量发送 StreamChunkTextDelta，
 // 工具调用通过 accumulator 累积后随 StreamChunkDone 一并输出。
+// 通过 StreamOptions.IncludeUsage 请求实际 token 用量，在末尾 chunk 中提取并随 Done 发出。
 func (p *OpenAIProvider) GenerateStream(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition) (<-chan schema.StreamChunk, error) {
 	openaiMsgs := p.convertMessages(msgs)
 	openaiTools, err := p.convertTools(availableTools)
@@ -88,6 +93,10 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, msgs []schema.Messa
 	reqParams := openai.ChatCompletionNewParams{
 		Model:    p.model,
 		Messages: openaiMsgs,
+		// IncludeUsage 使 OpenAI 在流末尾的空 Choices chunk 中填充 Usage 字段。
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		},
 	}
 	if len(openaiTools) > 0 {
 		reqParams.Tools = openaiTools
@@ -101,9 +110,19 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, msgs []schema.Messa
 
 		var contentBuf strings.Builder
 		toolAccs := newToolCallAccumulators()
+		var actualUsage *schema.Usage
 
 		for stream.Next() {
 			chunk := stream.Current()
+
+			// 末尾 Usage chunk：Choices 为空，但 Usage 已填充（当 IncludeUsage=true 时）。
+			if chunk.Usage.PromptTokens > 0 {
+				actualUsage = &schema.Usage{
+					InputTokens:  int(chunk.Usage.PromptTokens),
+					OutputTokens: int(chunk.Usage.CompletionTokens),
+				}
+			}
+
 			if len(chunk.Choices) == 0 {
 				continue
 			}
@@ -148,6 +167,7 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, msgs []schema.Messa
 		sendStreamChunk(ctx, ch, schema.StreamChunk{
 			Type:    schema.StreamChunkDone,
 			Message: msg,
+			Usage:   actualUsage,
 		})
 	}()
 

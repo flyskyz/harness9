@@ -114,10 +114,15 @@ func main() {
 		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("创建会话失败: %v", err)))
 	}
 
+	modelLimits := provider.GetModelLimits(modelName)
+	// SummarizationCompactor 使用同一 LLM 生成摘要，内置 TokenBudgetCompactor 作为错误回退。
+	compactor := memory.NewSummarizationCompactor(llm, modelLimits.ContextTokens)
+
 	eng := engine.NewAgentEngine(llm, registry, workDir,
 		engine.WithPromptBuilder(promptBuilder),
 		engine.WithSession(sess),
-		engine.WithCompactor(&memory.SlidingWindowCompactor{MaxMessages: 100}),
+		engine.WithCompactor(compactor),
+		engine.WithContextWindow(modelLimits.ContextTokens),
 	)
 
 	if term.IsTerminal(os.Stdin.Fd()) {

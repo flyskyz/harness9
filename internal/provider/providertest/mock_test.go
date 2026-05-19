@@ -9,7 +9,7 @@ import (
 
 func TestMockProvider_ThinkingPhase_ReturnsContent(t *testing.T) {
 	p := NewMock()
-	msg, err := p.Generate(context.Background(), nil, nil) // tools=nil → thinking
+	msg, _, err := p.Generate(context.Background(), nil, nil) // tools=nil → thinking
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestMockProvider_Turn1_RequestsToolCall(t *testing.T) {
 	p := NewMock()
 	tools := []schema.ToolDefinition{{Name: "bash"}}
 
-	msg, err := p.Generate(context.Background(), nil, tools)
+	msg, _, err := p.Generate(context.Background(), nil, tools)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,10 +44,10 @@ func TestMockProvider_Turn2_ReturnsFinalReply(t *testing.T) {
 	p := NewMock()
 	tools := []schema.ToolDefinition{{Name: "bash"}}
 
-	if _, err := p.Generate(context.Background(), nil, tools); err != nil { // turn 1
+	if _, _, err := p.Generate(context.Background(), nil, tools); err != nil { // turn 1
 		t.Fatalf("unexpected error on turn 1: %v", err)
 	}
-	msg, err := p.Generate(context.Background(), nil, tools) // turn 2
+	msg, _, err := p.Generate(context.Background(), nil, tools) // turn 2
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -65,13 +65,13 @@ func TestMockProvider_ThinkingPhase_DoesNotIncrementTurnCounter(t *testing.T) {
 
 	// Multiple thinking calls (tools=nil) must not advance the action turn counter.
 	for i := 0; i < 3; i++ {
-		if _, err := p.Generate(context.Background(), nil, nil); err != nil {
+		if _, _, err := p.Generate(context.Background(), nil, nil); err != nil {
 			t.Fatalf("unexpected error on thinking call %d: %v", i, err)
 		}
 	}
 
 	// First action call should still trigger turn 1 (tool call request).
-	msg, err := p.Generate(context.Background(), nil, tools)
+	msg, _, err := p.Generate(context.Background(), nil, tools)
 	if err != nil {
 		t.Fatal(err)
 	}

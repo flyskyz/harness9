@@ -34,6 +34,14 @@ const (
 
 	// EventError 表示 agent loop 中发生了错误。Data 类型为 string（错误描述）。
 	EventError EventType = "error"
+
+	// EventTokenUpdate 在每次 LLM 调用前发出，报告当前轮次的上下文 token 估算值。
+	// Data 类型为 TokenUpdateData。
+	EventTokenUpdate EventType = "token_update"
+
+	// EventCompaction 在上下文发生有效压缩时发出（token 数减少 > 5%）。
+	// Data 类型为 CompactionData。
+	EventCompaction EventType = "compaction"
 )
 
 // Event 是引擎面向客户端的流式事件单元。RunStream 返回 <-chan Event，
@@ -56,8 +64,29 @@ type Event struct {
 	Turn int       `json:"turn,omitempty"`
 	// Data 事件载荷，类型随 Type 变化：
 	//   EventActionDelta → string, EventToolStart → schema.ToolCall,
-	//   EventToolResult → schema.ToolResult, EventDone → nil, EventError → string
+	//   EventToolResult → schema.ToolResult, EventDone → nil, EventError → string,
+	//   EventTokenUpdate → TokenUpdateData, EventCompaction → CompactionData
 	Data any `json:"data,omitempty"`
+}
+
+// TokenUpdateData 是 EventTokenUpdate 事件的载荷。
+type TokenUpdateData struct {
+	// EstimatedTokens 当前上下文的估算 token 数（消息 + 工具定义）。
+	EstimatedTokens int `json:"estimated_tokens"`
+	// ContextWindow 当前模型的最大 context window（tokens）。0 表示未知。
+	ContextWindow int `json:"context_window"`
+}
+
+// CompactionData 是 EventCompaction 事件的载荷。
+type CompactionData struct {
+	// TokensBefore 压缩前的估算 token 数。
+	TokensBefore int `json:"tokens_before"`
+	// TokensAfter 压缩后的估算 token 数。
+	TokensAfter int `json:"tokens_after"`
+	// MsgsBefore 压缩前的消息条数。
+	MsgsBefore int `json:"msgs_before"`
+	// MsgsAfter 压缩后的消息条数。
+	MsgsAfter int `json:"msgs_after"`
 }
 
 // sendEvent 向 Event channel 发送事件，同时感知 context 取消。
@@ -81,7 +110,7 @@ func (e *AgentEngine) RunStream(ctx context.Context, userPrompt string) (<-chan 
 		defer close(ch)
 
 		em := emitter{
-			generate: func(ctx context.Context, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
+			generate: func(ctx context.Context, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
 				return e.streamGenerate(ctx, ch, turn, history, tools)
 			},
 			toolStart: func(turn int, tc schema.ToolCall) {
@@ -91,6 +120,15 @@ func (e *AgentEngine) RunStream(ctx context.Context, userPrompt string) (<-chan 
 			toolDone: func(turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration) {
 				log.Print(logfmt.FormatToolDone("engine-stream", turn, tc, result, d))
 				sendEvent(ctx, ch, Event{Type: EventToolResult, Turn: turn, Data: result})
+			},
+			tokenUpdate: func(tokens, window int) {
+				sendEvent(ctx, ch, Event{Type: EventTokenUpdate, Data: TokenUpdateData{
+					EstimatedTokens: tokens,
+					ContextWindow:   window,
+				}})
+			},
+			compaction: func(data CompactionData) {
+				sendEvent(ctx, ch, Event{Type: EventCompaction, Data: data})
 			},
 		}
 
@@ -105,29 +143,31 @@ func (e *AgentEngine) RunStream(ctx context.Context, userPrompt string) (<-chan 
 }
 
 // streamGenerate 驱动 Provider.GenerateStream，将 text_delta 转发为 EventActionDelta，
-// 最终返回 StreamChunkDone 中的完整 Message 供 runLoop 注入对话上下文。
-func (e *AgentEngine) streamGenerate(ctx context.Context, ch chan<- Event, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
+// 最终返回 StreamChunkDone 中的完整 Message 和实际 token 用量供 runLoop 消费。
+func (e *AgentEngine) streamGenerate(ctx context.Context, ch chan<- Event, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
 	stream, err := e.provider.GenerateStream(ctx, history, tools)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var msg *schema.Message
+	var usage *schema.Usage
 	for chunk := range stream {
 		switch chunk.Type {
 		case schema.StreamChunkTextDelta:
 			if !sendEvent(ctx, ch, Event{Type: EventActionDelta, Turn: turn, Data: chunk.Delta}) {
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			}
 		case schema.StreamChunkDone:
 			msg = chunk.Message
+			usage = chunk.Usage
 		case schema.StreamChunkError:
-			return nil, fmt.Errorf("%s", chunk.Error)
+			return nil, nil, fmt.Errorf("%s", chunk.Error)
 		}
 	}
 
 	if msg == nil {
-		return nil, fmt.Errorf("provider stream ended without done chunk")
+		return nil, nil, fmt.Errorf("provider stream ended without done chunk")
 	}
-	return msg, nil
+	return msg, usage, nil
 }

@@ -19,11 +19,13 @@ const (
 // StreamChunk 是 LLM 流式响应的单个增量单元。
 //
 //	Type == text_delta → Delta 有效
-//	Type == done       → Message 有效
+//	Type == done       → Message、Usage 有效
 //	Type == error      → Error 有效
 type StreamChunk struct {
 	Type    StreamChunkType `json:"type"`
 	Delta   string          `json:"delta,omitempty"`
 	Message *Message        `json:"message,omitempty"`
 	Error   string          `json:"error,omitempty"`
+	// Usage 在 StreamChunkDone 中由 Provider 填充，包含本次调用的实际 token 用量。
+	Usage *Usage `json:"usage,omitempty"`
 }

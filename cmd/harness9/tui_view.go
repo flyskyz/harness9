@@ -5,6 +5,10 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/harness9/internal/memory"
 )
 
 // shortPath 将绝对路径中的 $HOME 替换为 "~"。
@@ -71,9 +75,29 @@ func (m tuiModel) renderStatusBar() string {
 		if m.width < 120 && len(sid) > 8 {
 			sid = sid[:8] + "…"
 		}
-		sessionInfo = dimStyle.Render("  │  session: ") +
-			cyanStyle.Render(sid) +
-			dimStyle.Render(fmt.Sprintf("  msgs: %d", m.sessionMsgCount))
+		sessionInfo = dimStyle.Render("  │  session: ") + cyanStyle.Render(sid)
+
+		if m.contextTokens > 0 {
+			var tokenStr string
+			if m.contextWindow > 0 {
+				pct := m.contextTokens * 100 / m.contextWindow
+				var tokenStyle lipgloss.Style
+				switch {
+				case pct >= 80:
+					tokenStyle = tokenHighStyle
+				case pct >= 50:
+					tokenStyle = tokenWarnStyle
+				default:
+					tokenStyle = tokenOKStyle
+				}
+				tokenStr = tokenStyle.Render(
+					memory.FormatTokenCount(m.contextTokens)+"/"+memory.FormatTokenCount(m.contextWindow),
+				) + dimStyle.Render(fmt.Sprintf(" (%d%%)", pct))
+			} else {
+				tokenStr = cyanStyle.Render(memory.FormatTokenCount(m.contextTokens))
+			}
+			sessionInfo += dimStyle.Render("  ctx: ") + tokenStr
+		}
 	}
 	content := dimStyle.Render("  model: ") +
 		cyanStyle.Render(m.modelName) +

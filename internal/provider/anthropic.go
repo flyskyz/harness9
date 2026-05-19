@@ -57,15 +57,15 @@ func NewAnthropicProvider(model string, maxTokens int64) (*AnthropicProvider, er
 
 // Generate 实现 LLMProvider 接口的阻塞式调用。
 // 通过共享的 convertMessages / convertTools 完成类型转换后，
-// 调用 Anthropic SDK 的 Messages API 获取完整响应。
-func (p *AnthropicProvider) Generate(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, error) {
+// 调用 Anthropic SDK 的 Messages API 获取完整响应，并提取实际 token 用量。
+func (p *AnthropicProvider) Generate(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
 	anthropicMsgs, systemPrompt, err := p.convertMessages(msgs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	anthropicTools, err := p.convertTools(availableTools)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	params := anthropic.MessageNewParams{
@@ -86,15 +86,20 @@ func (p *AnthropicProvider) Generate(ctx context.Context, msgs []schema.Message,
 
 	resp, err := p.client.Messages.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("Anthropic 兼容 API 请求失败: %w", err)
+		return nil, nil, fmt.Errorf("Anthropic 兼容 API 请求失败: %w", err)
 	}
 
-	return p.extractMessage(resp.Content), nil
+	usage := &schema.Usage{
+		InputTokens:  int(resp.Usage.InputTokens),
+		OutputTokens: int(resp.Usage.OutputTokens),
+	}
+	return p.extractMessage(resp.Content), usage, nil
 }
 
 // GenerateStream 实现 LLMProvider 接口的流式调用。
 // 在独立 goroutine 中迭代 SDK 流，文本增量发送 StreamChunkTextDelta，
 // 工具调用通过 accumulator 累积后随 StreamChunkDone 一并输出。
+// 从 message_start 事件提取实际 InputTokens，随 StreamChunkDone 发出。
 func (p *AnthropicProvider) GenerateStream(ctx context.Context, msgs []schema.Message, availableTools []schema.ToolDefinition) (<-chan schema.StreamChunk, error) {
 	anthropicMsgs, systemPrompt, err := p.convertMessages(msgs)
 	if err != nil {
@@ -129,11 +134,20 @@ func (p *AnthropicProvider) GenerateStream(ctx context.Context, msgs []schema.Me
 
 		var contentBuf strings.Builder
 		toolAccs := newToolCallAccumulators()
+		var actualUsage *schema.Usage
 
 		for stream.Next() {
 			event := stream.Current()
 
 			switch event.Type {
+			case "message_start":
+				// message_start 携带本次请求的实际 InputTokens（在响应开始时即可获得）。
+				ms := event.AsMessageStart()
+				actualUsage = &schema.Usage{
+					InputTokens:  int(ms.Message.Usage.InputTokens),
+					OutputTokens: int(ms.Message.Usage.OutputTokens),
+				}
+
 			case "content_block_start":
 				cb := event.AsContentBlockStart()
 				if cb.ContentBlock.Type == "tool_use" {
@@ -176,6 +190,7 @@ func (p *AnthropicProvider) GenerateStream(ctx context.Context, msgs []schema.Me
 		sendStreamChunk(ctx, ch, schema.StreamChunk{
 			Type:    schema.StreamChunkDone,
 			Message: msg,
+			Usage:   actualUsage,
 		})
 	}()
 

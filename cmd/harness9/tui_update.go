@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/glamour"
 
 	"github.com/harness9/internal/engine"
+	"github.com/harness9/internal/memory"
 	"github.com/harness9/internal/schema"
 )
 
@@ -30,9 +31,6 @@ var builtinCmds = []struct {
 
 // eventMsg 将 engine.Event 包装为 tea.Msg，供 Bubbletea 的 Update 分发。
 type eventMsg engine.Event
-
-// msgCountMsg 携带会话消息条数，用于 EventDone 后异步刷新状态栏。
-type msgCountMsg int
 
 // readNextEvent 返回一个 tea.Cmd，该 Cmd 阻塞直到 ch 中有一个 Event，
 // 然后以 eventMsg 形式递交给 Update。ch 关闭时递交 EventDone。
@@ -163,10 +161,6 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, readNextEvent(ch)
 		}
 
-	case msgCountMsg:
-		m.sessionMsgCount = int(msg)
-		return m, nil
-
 	case eventMsg:
 		return m.handleEvent(engine.Event(msg))
 
@@ -245,7 +239,7 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 			m.lines[len(m.lines)-1] = doneStyle.Render("  ✅ 任务完成")
 		}
 		m.input.Focus()
-		return m, tea.Batch(textinput.Blink, m.refreshMsgCount())
+		return m, textinput.Blink
 
 	case engine.EventError:
 		errMsg, _ := evt.Data.(string)
@@ -260,6 +254,25 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		m.lines = append(m.lines, errorStyle.Render("❌ "+errMsg))
 		m.input.Focus()
 		return m, textinput.Blink
+
+	case engine.EventTokenUpdate:
+		data, _ := evt.Data.(engine.TokenUpdateData)
+		m.contextTokens = data.EstimatedTokens
+		if m.contextWindow == 0 && data.ContextWindow > 0 {
+			m.contextWindow = data.ContextWindow
+		}
+		return m, readNextEvent(m.eventCh)
+
+	case engine.EventCompaction:
+		data, _ := evt.Data.(engine.CompactionData)
+		line := dimStyle.Render(fmt.Sprintf("  ⚡ 上下文已压缩 — %s → %s tokens（%d → %d 条消息）",
+			memory.FormatTokenCount(data.TokensBefore),
+			memory.FormatTokenCount(data.TokensAfter),
+			data.MsgsBefore,
+			data.MsgsAfter,
+		))
+		m.lines = append(m.lines, line)
+		return m, readNextEvent(m.eventCh)
 	}
 
 	return m, readNextEvent(m.eventCh)
@@ -503,7 +516,6 @@ func (m tuiModel) handleNewSession() (tea.Model, tea.Cmd) {
 	}
 	m.session = sess
 	m.sessionID = sess.SessionID()
-	m.sessionMsgCount = 0
 	if m.eng != nil {
 		m.eng.SetSession(sess)
 	}
@@ -579,7 +591,6 @@ func (m tuiModel) handleResumeSelection(raw string) (tea.Model, tea.Cmd) {
 	}
 	m.session = sess
 	m.sessionID = info.ID
-	m.sessionMsgCount = info.MsgCount
 	if m.eng != nil {
 		m.eng.SetSession(sess)
 	}
@@ -588,19 +599,4 @@ func (m tuiModel) handleResumeSelection(raw string) (tea.Model, tea.Cmd) {
 	))
 	m.input.Focus()
 	return m, textinput.Blink
-}
-
-// refreshMsgCount 异步查询当前会话消息条数，返回 msgCountMsg tea.Cmd。
-func (m tuiModel) refreshMsgCount() tea.Cmd {
-	if m.session == nil {
-		return nil
-	}
-	sess := m.session
-	return func() tea.Msg {
-		msgs, err := sess.GetMessages(context.Background(), 0)
-		if err != nil {
-			return nil
-		}
-		return msgCountMsg(len(msgs))
-	}
 }

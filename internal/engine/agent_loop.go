@@ -36,6 +36,12 @@ func WithMaxConcurrentTools(n int) Option {
 	return func(e *AgentEngine) { e.maxConcurrentTools = n }
 }
 
+// WithContextWindow 设置模型的最大 context window（tokens），用于 TUI token 使用率展示。
+// 通常通过 provider.GetModelLimits(modelName).ContextTokens 获取。
+func WithContextWindow(tokens int) Option {
+	return func(e *AgentEngine) { e.contextWindow = tokens }
+}
+
 // PromptBuilder 构造 Agent 的 system prompt。
 // 接口定义在 engine 包（使用者侧），由 internal/context 包实现。
 // 引擎通过此接口与 Context Engineering 模块解耦。
@@ -75,6 +81,7 @@ type AgentEngine struct {
 	maxTurns           int
 	toolTimeout        time.Duration
 	maxConcurrentTools int
+	contextWindow      int // 模型 context window（tokens），用于 TUI 展示，0 表示未知
 	promptBuilder      PromptBuilder
 	mu                 sync.RWMutex     // protects session and compactor
 	session            memory.Session   // 可选，nil 表示无持久化
@@ -97,35 +104,55 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, op
 }
 
 // emitter 封装 Run 与 RunStream 在"输出侧"的差异：
-//   - generate:  如何执行一次 LLM 调用并处理输出（阻塞打印 stdout vs 流式发事件）
-//   - toolStart: 工具开始时的副作用（仅日志 vs 日志 + EventToolStart）
-//   - toolDone:  工具完成时的副作用（仅日志 vs 日志 + EventToolResult）
+//   - generate:     如何执行一次 LLM 调用并处理输出（阻塞打印 stdout vs 流式发事件）
+//   - toolStart:    工具开始时的副作用（仅日志 vs 日志 + EventToolStart）
+//   - toolDone:     工具完成时的副作用（仅日志 vs 日志 + EventToolResult）
+//   - tokenUpdate:  报告 token 用量（仅日志 vs 日志 + EventTokenUpdate）
+//   - compaction:   上下文压缩时报告压缩详情（仅日志 vs 日志 + EventCompaction）
 //
 // toolStart / toolDone 在 per-tool goroutine 中并发调用，实现方需自行保证安全。
 type emitter struct {
-	generate  func(ctx context.Context, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error)
+	// generate 执行一次 LLM 调用，返回响应 Message 和实际 token 用量（可能为 nil）。
+	generate  func(ctx context.Context, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error)
 	toolStart func(turn int, tc schema.ToolCall)
 	toolDone  func(turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration)
+	// tokenUpdate 报告当前 context 的 token 用量。
+	// 在 LLM 调用前以估算值调用；调用后若有实际用量则以实际值再次调用。
+	// tokens = token 数；window = 模型 context window（0 表示未知）。
+	tokenUpdate func(tokens, window int)
+	// compaction 在上下文发生有效压缩时调用（token 数减少 > 5%）。
+	compaction func(data CompactionData)
 }
 
 // Run 执行单个用户 prompt 的阻塞式主循环，文本输出到 stdout。
 func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 	em := emitter{
-		generate: func(ctx context.Context, _ int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
-			msg, err := e.provider.Generate(ctx, history, tools)
+		generate: func(ctx context.Context, _ int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
+			msg, usage, err := e.provider.Generate(ctx, history, tools)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if msg.Content != "" {
 				fmt.Printf("[assistant] %s\n", msg.Content)
 			}
-			return msg, nil
+			return msg, usage, nil
 		},
 		toolStart: func(turn int, tc schema.ToolCall) {
 			log.Print(logfmt.FormatToolStart("engine", turn, tc))
 		},
 		toolDone: func(turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration) {
 			log.Print(logfmt.FormatToolDone("engine", turn, tc, result, d))
+		},
+		tokenUpdate: func(tokens, window int) {
+			log.Print(logfmt.FormatMsg("engine", fmt.Sprintf("context tokens: ~%s", memory.FormatTokenCount(tokens))))
+		},
+		compaction: func(data CompactionData) {
+			log.Print(logfmt.FormatMsg("engine", fmt.Sprintf(
+				"context compacted: %s → %s tokens (%d → %d msgs)",
+				memory.FormatTokenCount(data.TokensBefore),
+				memory.FormatTokenCount(data.TokensAfter),
+				data.MsgsBefore, data.MsgsAfter,
+			)))
 		},
 	}
 	return e.runLoop(ctx, userPrompt, "engine", em)
@@ -159,15 +186,41 @@ func (e *AgentEngine) runLoop(ctx context.Context, userPrompt string, logPrefix 
 		}
 
 		availableTools := e.registry.GetAvailableTools()
+		toolTokens := memory.EstimateToolTokens(availableTools)
+
+		// Preflight token check: estimate tokens before and after compaction.
+		msgTokensBefore := memory.EstimateTokens(contextHistory)
+		compactedHistory := e.applyCompactionWith(comp, contextHistory)
+		msgTokensAfter := memory.EstimateTokens(compactedHistory)
+		totalTokens := msgTokensAfter + toolTokens
+
+		// Emit EventCompaction if compaction reduced tokens by > 5%.
+		if comp != nil && msgTokensAfter < int(float64(msgTokensBefore)*0.95) {
+			em.compaction(CompactionData{
+				TokensBefore: msgTokensBefore + toolTokens,
+				TokensAfter:  totalTokens,
+				MsgsBefore:   len(contextHistory),
+				MsgsAfter:    len(compactedHistory),
+			})
+		}
+
+		// Report current context token usage to TUI / CLI.
+		em.tokenUpdate(totalTokens, e.contextWindow)
+
 		turnStart := time.Now()
-		log.Print(logfmt.FormatTurnStart(logPrefix, turnCount, len(contextHistory), len(availableTools)))
+		log.Print(logfmt.FormatTurnStart(logPrefix, turnCount, len(compactedHistory), len(availableTools)))
 
 		llmStart := time.Now()
-		responseMsg, err := em.generate(ctx, turnCount, e.applyCompactionWith(comp, contextHistory), availableTools)
+		responseMsg, usage, err := em.generate(ctx, turnCount, compactedHistory, availableTools)
 		if err != nil {
 			return fmt.Errorf("模型生成失败 (turn %d): %w", turnCount, err)
 		}
 		llmDuration := time.Since(llmStart)
+
+		// 用实际 API 返回的 token 用量更新显示，替代之前的估算值。
+		if usage != nil && usage.InputTokens > 0 {
+			em.tokenUpdate(usage.InputTokens, e.contextWindow)
+		}
 
 		contextHistory = append(contextHistory, *responseMsg)
 
@@ -202,12 +255,23 @@ func (e *AgentEngine) buildSystemPrompt() string {
 	if e.promptBuilder != nil {
 		return e.promptBuilder.Build()
 	}
-	return fmt.Sprintf(
-		"You are harness9, an expert coding assistant. "+
-			"You have full access to tools in the workspace. "+
-			"Your working directory is: %s",
-		e.workDir,
-	)
+	return fmt.Sprintf(`Your name is harness9. Always refer to yourself as "harness9" — never as "AI assistant", "language model", or any other generic term.
+
+harness9 is a general-purpose AI agent with full access to the user's computer.
+
+Capabilities:
+- Run shell commands to execute programs, manage processes, install packages, and interact with the OS
+- Read, write, and edit files across the filesystem
+- Chain multiple tools together to complete complex, multi-step tasks autonomously
+
+Working directory: %s
+
+Guidelines:
+- Investigate before acting: read files and run diagnostic commands first
+- Work in small verifiable steps; check results after each significant action
+- When a command fails, diagnose the root cause rather than guessing
+- Prefer targeted edits over full rewrites; preserve existing style and conventions
+- If a task is ambiguous, choose the most reasonable interpretation and proceed`, e.workDir)
 }
 
 // loadHistoryWith 从 sess 加载历史消息，注入 system prompt 和当前用户输入。
