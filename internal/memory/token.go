@@ -38,6 +38,7 @@ func EstimateToolTokens(tools []schema.ToolDefinition) int {
 			if b, err := json.Marshal(t.InputSchema); err == nil {
 				total += len(b)
 			}
+			// marshalling failure silently → conservative estimate (0 for schema)
 		}
 	}
 	return total / charsPerToken
