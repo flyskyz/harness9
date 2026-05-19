@@ -35,8 +35,9 @@ type mockProvider struct {
 }
 
 // Generate 实现 LLMProvider 接口的阻塞式调用，委托给 simulateResponse。
-func (m *mockProvider) Generate(_ context.Context, _ []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
-	return m.simulateResponse(tools), nil
+// 测试桩不模拟真实 API 调用，Usage 返回 nil。
+func (m *mockProvider) Generate(_ context.Context, _ []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
+	return m.simulateResponse(tools), nil, nil
 }
 
 // GenerateStream 实现 LLMProvider 接口的流式调用。
@@ -115,9 +116,10 @@ func NewMockWithCallback(fn func([]schema.Message, []schema.ToolDefinition) sche
 	return &MockWithCallback{fn: fn}
 }
 
-func (m *MockWithCallback) Generate(_ context.Context, msgs []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
+// Generate 实现 LLMProvider 接口，执行回调并返回结果。Usage 返回 nil（测试桩）。
+func (m *MockWithCallback) Generate(_ context.Context, msgs []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
 	result := m.fn(msgs, tools)
-	return &result, nil
+	return &result, nil, nil
 }
 
 func (m *MockWithCallback) GenerateStream(ctx context.Context, msgs []schema.Message, tools []schema.ToolDefinition) (<-chan schema.StreamChunk, error) {

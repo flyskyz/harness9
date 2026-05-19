@@ -91,3 +91,13 @@ type ToolDefinition struct {
 	// Anthropic 需要 map[string]any），各 Provider 实现负责类型转换（Type Adaptation）。
 	InputSchema any `json:"input_schema"`
 }
+
+// Usage 记录单次 LLM API 调用的 token 用量，由 Provider 从 API 响应中提取。
+// 非流式调用直接从响应 usage 字段读取；流式调用从 message_start（Anthropic）
+// 或末尾含 usage 的 chunk（OpenAI，需开启 include_usage）提取。
+type Usage struct {
+	// InputTokens 本次调用实际消耗的输入 token 数（包含 system prompt + 对话历史 + 工具定义）。
+	InputTokens int `json:"input_tokens"`
+	// OutputTokens 本次调用实际生成的输出 token 数。
+	OutputTokens int `json:"output_tokens"`
+}

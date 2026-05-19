@@ -36,22 +36,22 @@ type providerCall struct {
 	tools    []schema.ToolDefinition
 }
 
-func (p *countingProvider) Generate(_ context.Context, messages []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
+func (p *countingProvider) Generate(_ context.Context, messages []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	p.calls = append(p.calls, providerCall{messages: messages, tools: tools})
 
 	if len(p.responses) == 0 {
-		return &schema.Message{Role: schema.RoleAssistant, Content: "no more responses"}, nil
+		return &schema.Message{Role: schema.RoleAssistant, Content: "no more responses"}, nil, nil
 	}
 	fn := p.responses[0]
 	p.responses = p.responses[1:]
-	return fn(tools), nil
+	return fn(tools), nil, nil
 }
 
 func (p *countingProvider) GenerateStream(ctx context.Context, messages []schema.Message, tools []schema.ToolDefinition) (<-chan schema.StreamChunk, error) {
-	msg, err := p.Generate(ctx, messages, tools)
+	msg, _, err := p.Generate(ctx, messages, tools)
 	if err != nil {
 		return nil, err
 	}

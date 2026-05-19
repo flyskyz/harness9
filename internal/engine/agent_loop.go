@@ -107,16 +107,18 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, op
 //   - generate:     如何执行一次 LLM 调用并处理输出（阻塞打印 stdout vs 流式发事件）
 //   - toolStart:    工具开始时的副作用（仅日志 vs 日志 + EventToolStart）
 //   - toolDone:     工具完成时的副作用（仅日志 vs 日志 + EventToolResult）
-//   - tokenUpdate:  每次 LLM 调用前报告 token 估算（仅日志 vs 日志 + EventTokenUpdate）
+//   - tokenUpdate:  报告 token 用量（仅日志 vs 日志 + EventTokenUpdate）
 //   - compaction:   上下文压缩时报告压缩详情（仅日志 vs 日志 + EventCompaction）
 //
 // toolStart / toolDone 在 per-tool goroutine 中并发调用，实现方需自行保证安全。
 type emitter struct {
-	generate  func(ctx context.Context, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error)
+	// generate 执行一次 LLM 调用，返回响应 Message 和实际 token 用量（可能为 nil）。
+	generate  func(ctx context.Context, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error)
 	toolStart func(turn int, tc schema.ToolCall)
 	toolDone  func(turn int, tc schema.ToolCall, result schema.ToolResult, d time.Duration)
-	// tokenUpdate 在每次 LLM 调用前报告当前 context 的 token 估算值。
-	// tokens = 消息 tokens + 工具定义 tokens；window = 模型 context window（0 表示未知）。
+	// tokenUpdate 报告当前 context 的 token 用量。
+	// 在 LLM 调用前以估算值调用；调用后若有实际用量则以实际值再次调用。
+	// tokens = token 数；window = 模型 context window（0 表示未知）。
 	tokenUpdate func(tokens, window int)
 	// compaction 在上下文发生有效压缩时调用（token 数减少 > 5%）。
 	compaction func(data CompactionData)
@@ -125,15 +127,15 @@ type emitter struct {
 // Run 执行单个用户 prompt 的阻塞式主循环，文本输出到 stdout。
 func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 	em := emitter{
-		generate: func(ctx context.Context, _ int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
-			msg, err := e.provider.Generate(ctx, history, tools)
+		generate: func(ctx context.Context, _ int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
+			msg, usage, err := e.provider.Generate(ctx, history, tools)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if msg.Content != "" {
 				fmt.Printf("[assistant] %s\n", msg.Content)
 			}
-			return msg, nil
+			return msg, usage, nil
 		},
 		toolStart: func(turn int, tc schema.ToolCall) {
 			log.Print(logfmt.FormatToolStart("engine", turn, tc))
@@ -209,11 +211,16 @@ func (e *AgentEngine) runLoop(ctx context.Context, userPrompt string, logPrefix 
 		log.Print(logfmt.FormatTurnStart(logPrefix, turnCount, len(compactedHistory), len(availableTools)))
 
 		llmStart := time.Now()
-		responseMsg, err := em.generate(ctx, turnCount, compactedHistory, availableTools)
+		responseMsg, usage, err := em.generate(ctx, turnCount, compactedHistory, availableTools)
 		if err != nil {
 			return fmt.Errorf("模型生成失败 (turn %d): %w", turnCount, err)
 		}
 		llmDuration := time.Since(llmStart)
+
+		// 用实际 API 返回的 token 用量更新显示，替代之前的估算值。
+		if usage != nil && usage.InputTokens > 0 {
+			em.tokenUpdate(usage.InputTokens, e.contextWindow)
+		}
 
 		contextHistory = append(contextHistory, *responseMsg)
 

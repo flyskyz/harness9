@@ -35,10 +35,10 @@
           │                               │                     │
     ┌─────┴────┐                    ┌────┴────┐         ┌──────┴──────┐
     ▼          ▼                    ▼         ▼         ▼             ▼
-┌────────┐ ┌────────┐         ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐
-│ OpenAI │ │Anthropic│        │  bash  │ │read /  │ │Session │ │Compactor │
-│Provider│ │Provider │        │  Tool  │ │write   │ │Manager │ │(滑动窗口) │
-└────────┘ └────────┘         └────────┘ └────────┘ └────────┘ └──────────┘
+┌────────┐ ┌────────┐         ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────────┐
+│ OpenAI │ │Anthropic│        │  bash  │ │read /  │ │Session │ │  Compactor   │
+│Provider│ │Provider │        │  Tool  │ │write   │ │Manager │ │(TokenBudget) │
+└────────┘ └────────┘         └────────┘ └────────┘ └────────┘ └──────────────┘
 ```
 
 **Engine** 驱动 Agent 主循环：**推理 → 工具调用 → 观察 → 继续推理**
@@ -176,21 +176,28 @@ for evt := range stream {
 }
 ```
 
-### Short-Term Memory（会话历史持久化）
+### Context Engineering（上下文管理）
 
-每次对话的消息历史自动持久化到 SQLite（`~/.harness9/sessions.db`），重启后可从中断处继续：
+每次对话的消息历史自动持久化到 SQLite（`~/.harness9/sessions.db`），重启后可从中断处继续。TUI 状态栏实时展示 token 用量和颜色告警：
 
 ```
-$ harness9
-session: a1b2c3d4  msgs: 12         ← 状态栏实时显示当前会话 ID 和消息数
-
-harness9> /new       # 开启全新会话
-harness9> /resume    # 列出历史会话并选择恢复
+[harness9] gpt-4o-mini  workdir: ~/myproject  │  session: a1b2c3d4  ctx: 45.2K/128K (35%)
 ```
 
-**SlidingWindowCompactor** 在上下文超出窗口限制时自动压缩，始终保留系统提示和最新 N 条消息，并回溯对齐孤立的工具调用观察，避免 LLM API 报错。
+**Token Budget 压缩**：`TokenBudgetCompactor`（默认）感知模型 context window，在用量超过 80% 时自动触发压缩，并在 TUI 中显示通知：
 
-详见 [Short-Term Memory 技术方案](docs/核心功能/short-term-memory.md)。
+```
+⚡ 上下文已压缩 — 12.5K → 6.2K tokens（45 → 22 条消息）
+```
+
+会话管理命令：
+
+```
+/new       # 开启全新会话
+/resume    # 列出历史会话并选择恢复
+```
+
+详见 [Context Engineering 技术方案](docs/核心功能/context-engineering.md)。
 
 ### 自愈能力
 
@@ -370,12 +377,13 @@ func main() {
 
 | 模块 | 说明 | 状态 |
 |------|------|:----:|
-| **TUI** | 全屏 TUI（Bubbletea）：WelcomeBanner + 对话页双 Phase、流式输出、Spinner 动词轮换、Tab 补全、滚动 | ✅ |
-| **Engine** | 标准 ReAct 主循环，阻塞 + 流式双模式 | ✅ |
+| **TUI** | 全屏 TUI（Bubbletea）：WelcomeBanner + 对话页双 Phase、流式输出、Spinner 动词轮换、Tab 补全、Token 用量实时展示 | ✅ |
+| **Engine** | 标准 ReAct 主循环，阻塞 + 流式双模式，EventTokenUpdate / EventCompaction 事件 | ✅ |
+| **Memory** | Short-Term Memory：SQLiteSession、TokenBudgetCompactor（默认）、SlidingWindowCompactor、孤立工具对修复 | ✅ |
 | **Context** | System Prompt 结构化组装（基础 + AGENTS.md + Skills 索引） | ✅ |
 | **Skills** | Skills 解析、索引、按需加载（`use_skill` 工具） | ✅ |
-| **Provider** | LLM 统一接口，OpenAI / Anthropic 适配器 | ✅ |
-| **Schema** | 跨组件共享的核心数据类型 | ✅ |
+| **Provider** | LLM 统一接口，OpenAI / Anthropic 适配器（含实际 token 用量提取） | ✅ |
+| **Schema** | 跨组件共享的核心数据类型（含 Usage 类型） | ✅ |
 | **Tools** | 工具注册表 + 内置工具（bash / read_file / write_file / edit_file） | ✅ |
 | **Env** | 零依赖 `.env` 配置加载器 | ✅ |
 
@@ -435,11 +443,12 @@ harness9/
 │       └── format_test.go
 ├── docs/
 │   └── 核心功能/
-│       ├── cli.md                   # CLI 使用指南（本文档）
+│       ├── cli.md                   # CLI 使用指南
 │       ├── agent-skills.md          # Agent Skills 设计原理
 │       ├── tui.md                   # TUI 交互界面实现原理
 │       ├── agent-loop.md            # Agent Loop 核心实现原理
-│       └── tool-calling.md          # Tool Calling 工具调用系统详解
+│       ├── tool-calling.md          # Tool Calling 工具调用系统详解
+│       └── context-engineering.md   # Context Engineering 技术方案（含 Short-Term Memory）
 ├── skills/                          # 示例 Skills（可复制到你的项目中使用）
 │   ├── go-coding-standards/
 │   │   └── SKILL.md
@@ -465,7 +474,7 @@ harness9/
 | [Agent Skills 设计原理](docs/核心功能/agent-skills.md) | Progressive Disclosure、frontmatter 规范、use_skill 工具 |
 | [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md) | 标准 ReAct 设计原理、PromptBuilder、流式架构 |
 | [Tool Calling 工具调用系统](docs/核心功能/tool-calling.md) | 工具接口、并发模型、内置工具详解、扩展指南 |
-| [Short-Term Memory 技术方案](docs/核心功能/short-term-memory.md) | SQLiteSession、SlidingWindowCompactor、TUI 集成、并发安全设计 |
+| [Context Engineering 技术方案](docs/核心功能/context-engineering.md) | SQLiteSession、TokenBudgetCompactor、Token 估算、TUI token 展示、并发安全设计 |
 | [AGENTS.md](AGENTS.md) | 项目开发规范、编码标准、架构决策 |
 
 ---

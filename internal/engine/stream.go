@@ -110,7 +110,7 @@ func (e *AgentEngine) RunStream(ctx context.Context, userPrompt string) (<-chan 
 		defer close(ch)
 
 		em := emitter{
-			generate: func(ctx context.Context, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
+			generate: func(ctx context.Context, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
 				return e.streamGenerate(ctx, ch, turn, history, tools)
 			},
 			toolStart: func(turn int, tc schema.ToolCall) {
@@ -143,29 +143,31 @@ func (e *AgentEngine) RunStream(ctx context.Context, userPrompt string) (<-chan 
 }
 
 // streamGenerate 驱动 Provider.GenerateStream，将 text_delta 转发为 EventActionDelta，
-// 最终返回 StreamChunkDone 中的完整 Message 供 runLoop 注入对话上下文。
-func (e *AgentEngine) streamGenerate(ctx context.Context, ch chan<- Event, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, error) {
+// 最终返回 StreamChunkDone 中的完整 Message 和实际 token 用量供 runLoop 消费。
+func (e *AgentEngine) streamGenerate(ctx context.Context, ch chan<- Event, turn int, history []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
 	stream, err := e.provider.GenerateStream(ctx, history, tools)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var msg *schema.Message
+	var usage *schema.Usage
 	for chunk := range stream {
 		switch chunk.Type {
 		case schema.StreamChunkTextDelta:
 			if !sendEvent(ctx, ch, Event{Type: EventActionDelta, Turn: turn, Data: chunk.Delta}) {
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			}
 		case schema.StreamChunkDone:
 			msg = chunk.Message
+			usage = chunk.Usage
 		case schema.StreamChunkError:
-			return nil, fmt.Errorf("%s", chunk.Error)
+			return nil, nil, fmt.Errorf("%s", chunk.Error)
 		}
 	}
 
 	if msg == nil {
-		return nil, fmt.Errorf("provider stream ended without done chunk")
+		return nil, nil, fmt.Errorf("provider stream ended without done chunk")
 	}
-	return msg, nil
+	return msg, usage, nil
 }
