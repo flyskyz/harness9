@@ -50,6 +50,13 @@ var (
 	brandStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true)
 	sepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 
+	// Plan Mode 色调 — 琥珀黄色系，替换默认青色系
+	planAccentStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	planStatusBarStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("94")).
+				Foreground(lipgloss.Color("220")).
+				Padding(0, 1)
+
 	// token 使用率颜色（绿/黄/红，按使用量变化）
 	tokenOKStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // < 50%: 绿
 	tokenWarnStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // 50-80%: 黄
