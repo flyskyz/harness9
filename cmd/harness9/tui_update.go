@@ -74,6 +74,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.planReviewing = false
 				m.planMode = planning.PlanModeDefault
 				m.input.Placeholder = "输入任务..."
+				m.autoExecuting = true
+				m.autoExecPrevDone = 0
+				m.autoExecStuck = 0
 				if m.eng != nil {
 					m.eng.SetPlanMode(planning.PlanModeDefault)
 				}
@@ -83,6 +86,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.planReviewing = false
 				m.planMode = planning.PlanModeAutoEdit
 				m.input.Placeholder = "输入任务..."
+				m.autoExecuting = true
+				m.autoExecPrevDone = 0
+				m.autoExecStuck = 0
 				if m.eng != nil {
 					m.eng.SetPlanMode(planning.PlanModeAutoEdit)
 				}
@@ -109,6 +115,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyCtrlD:
 			if m.running {
+				m.autoExecuting = false
 				m.cancelFn()
 				return m, nil
 			}
@@ -290,6 +297,38 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 			m.planReviewing = true
 			return m, nil
 		}
+		// 自动执行模式：若仍有未完成 todo，检测进度后决定是否续跑
+		if m.autoExecuting && m.todoStore != nil {
+			items := m.todoStore.Read()
+			var pending, done int
+			for _, item := range items {
+				switch item.Status {
+				case planning.TodoPending, planning.TodoInProgress:
+					pending++
+				case planning.TodoCompleted:
+					done++
+				}
+			}
+			if pending > 0 {
+				if done > m.autoExecPrevDone {
+					// 有进度：重置停滞计数，继续执行
+					m.autoExecStuck = 0
+				} else {
+					m.autoExecStuck++
+				}
+				if m.autoExecStuck < 3 {
+					m.autoExecPrevDone = done
+					return m.dispatch("继续按 todo 计划执行下一个待办项。先用 todo_write 将该项状态更新为 in_progress，完成实际工作后更新为 completed，然后继续处理下一项，直到全部完成。")
+				}
+				// 连续 3 次无进度，放弃自动执行
+				m.autoExecuting = false
+				m.autoExecStuck = 0
+				m.lines = append(m.lines, dimStyle.Render("  ⚠ 执行停滞，请手动描述下一步"))
+			} else {
+				// 所有 todo 已完成
+				m.autoExecuting = false
+			}
+		}
 		// 纯工具执行无文字回复时，补充完成标记
 		if len(m.lines) > 0 && m.lines[len(m.lines)-1] == "" {
 			m.lines[len(m.lines)-1] = doneStyle.Render("  ✅ 任务完成")
@@ -307,6 +346,7 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		}
 		m.running = false
 		m.currentTool = ""
+		m.autoExecuting = false
 		m.lines = append(m.lines, errorStyle.Render("❌ "+errMsg))
 		m.input.Focus()
 		return m, textinput.Blink

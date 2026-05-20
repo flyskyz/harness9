@@ -147,6 +147,11 @@ type tuiModel struct {
 	// Plan Mode 状态
 	planMode      planning.PlanMode
 	planReviewing bool // Plan Mode 完成后展示审查对话框
+
+	// 自动执行状态（选项 1/2 批准后激活）
+	autoExecuting    bool // true = EventDone 时若有剩余 todo 自动续跑
+	autoExecPrevDone int  // 上次 dispatch 启动时已完成的 todo 数，用于检测进度停滞
+	autoExecStuck    int  // 连续无进度的 dispatch 次数，达到 3 次后放弃
 }
 
 // newTUIModel 构造已初始化的 tuiModel：输入框聚焦，spinner 使用 Dot 样式。
