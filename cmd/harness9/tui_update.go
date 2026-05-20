@@ -168,6 +168,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// /plan <task> — 进入 Plan Mode 并发送任务
+			// 仅 "/plan"（无任务描述）时：激活 Plan Mode 并提示用户输入任务，不发送请求。
 			if raw == "/plan" || strings.HasPrefix(raw, "/plan ") {
 				task := strings.TrimSpace(strings.TrimPrefix(raw, "/plan"))
 				m.planMode = planning.PlanModePlan
@@ -175,7 +176,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.eng.SetPlanMode(planning.PlanModePlan)
 				}
 				if task == "" {
-					task = "Please analyze the codebase and produce a detailed implementation plan."
+					m.lines = append(m.lines, dimStyle.Render("  [PLAN] 已进入规划模式 — 请输入要规划的任务"))
+					m.input.Placeholder = "描述要规划的任务..."
+					m.input.Reset()
+					m.input.Focus()
+					return m, textinput.Blink
 				}
 				raw = task
 			}
