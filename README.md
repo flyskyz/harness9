@@ -84,6 +84,40 @@ skills/
 
 详见 [Agent Skills 设计原理](docs/核心功能/agent-skills.md)。
 
+### Planning 模块（先规划、再执行）
+
+通过 `Shift+Tab` 切换到 Plan Mode（状态栏显示 `[PLAN]`，色调切换为琥珀黄）。
+
+```
+用户：帮我写一个 Go Web API
+
+[PLAN]  分析请求 → read_file/bash 只读探索
+        → todo_write 生成实现计划
+        → 文字简述后停止
+
+        ╭──────────────────────────────────────╮
+        │  Plan Mode 完成 — 选择下一步操作      │
+        │  [1] 批准并自动执行                  │
+        │  [2] 批准并逐步确认编辑               │
+        │  [3] 继续修改计划                    │
+        │  [4] 取消                            │
+        ╰──────────────────────────────────────╯
+
+批准后 Agent 按清单逐项执行，todo 快照实时追加在对话流中：
+
+  ✓ todo_write({...}) — 0s
+  ☰  Tasks  ·  3/11  ·  1 active
+   1.  ✔  创建目录结构
+   2.  ✔  初始化 go.mod
+   3.  ▶  实现 main.go
+```
+
+- **工具层权限控制**：Plan Mode 下 `write_file`、`edit_file` 被从工具列表移除，无论 prompt 如何，LLM 根本看不到写工具
+- **作弊防护**：`todo_write` 校验状态转换，`pending → completed` 直跳被拒绝，LLM 必须经过 `in_progress` 才能完成条目
+- **停滞检测**：连续 3 次 `EventDone` 无进度后停止自动执行，提示手动干预
+
+详见 [Planning 模块实现原理](docs/核心功能/planning.md)。
+
 ### 标准 ReAct 循环
 
 每个 Turn 执行一次 LLM 调用（携带完整工具列表），工具结果作为 Observation 注入上下文，驱动下一轮推理：
@@ -132,6 +166,7 @@ for evt := range stream {
 | ------------ | --------------------------------------------------------------------------------------- | --- |
 | **TUI**      | 全屏 TUI（Bubbletea）：双 Phase、流式输出、Spinner、Tab 补全、Token 用量实时展示                              | ✅   |
 | **Engine**   | 标准 ReAct 主循环，阻塞 + 流式双模式，EventTokenUpdate / EventCompaction 事件                           | ✅   |
+| **Planning** | Plan Mode（先规划后执行）、TodoStore、todo_write 工具、工具层权限过滤、自动续跑 + 停滞检测                          | ✅   |
 | **Memory**   | SQLiteSession（WAL）、SummarizationCompactor（默认，LLM 摘要）、TokenBudgetCompactor（回退）、孤立工具对双向修复 | ✅   |
 | **Context**  | System Prompt 结构化组装（基础 + AGENTS.md + Skills 索引）                                         | ✅   |
 | **Skills**   | Skills 解析、索引、按需加载（`use_skill` 工具）                                                       | ✅   |
@@ -156,6 +191,7 @@ harness9/
 │   └── cli.go               # 交互式 CLI REPL 实现
 ├── internal/
 │   ├── engine/              # ReAct 主循环（Run + RunStream）
+│   ├── planning/            # PlanMode 枚举 + TodoStore（任务列表）
 │   ├── memory/              # Session 持久化 + Compactor 压缩策略
 │   ├── provider/            # OpenAI / Anthropic 适配器 + 模型限制注册表
 │   ├── schema/              # 共享数据类型（Message、StreamChunk、Usage）
@@ -177,14 +213,15 @@ harness9/
 
 | 文档                                                           | 内容                                                   |
 | ------------------------------------------------------------ | ---------------------------------------------------- |
-| [快速启动指南](docs/核心功能/quick_start.md)                           | 安装、API Key 配置、TUI 首次使用、基本命令、常见问题                     |
-| [TUI 交互界面实现原理](docs/核心功能/tui.md)                             | Bubbletea 架构、布局、事件流、键盘交互                             |
-| [CLI 使用指南](docs/核心功能/cli.md)                                 | 启动、环境变量、AGENTS.md、Skills 配置                          |
-| [Agent Skills 设计原理](docs/核心功能/agent-skills.md)               | Progressive Disclosure、frontmatter 规范、use_skill 工具   |
-| [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md)                 | 标准 ReAct 设计原理、PromptBuilder、流式架构                     |
-| [Tool Calling 工具调用系统](docs/核心功能/tool-calling.md)             | 工具接口、并发模型、内置工具详解、扩展指南                                |
-| [Context Engineering 技术方案](docs/核心功能/context-engineering.md) | SQLiteSession、SummarizationCompactor、Token 估算、并发安全设计 |
-| [AGENTS.md](AGENTS.md)                                       | 项目开发规范、编码标准、架构决策                                     |
+| [快速启动指南](docs/核心功能/quick_start.md)                           | 安装、API Key 配置、TUI 首次使用、基本命令、常见问题                          |
+| [TUI 交互界面实现原理](docs/核心功能/tui.md)                             | Bubbletea 架构、布局、事件流、键盘交互                                |
+| [CLI 使用指南](docs/核心功能/cli.md)                                 | 启动、环境变量、AGENTS.md、Skills 配置                             |
+| [Agent Skills 设计原理](docs/核心功能/agent-skills.md)               | Progressive Disclosure、frontmatter 规范、use_skill 工具      |
+| [Agent Loop 核心实现原理](docs/核心功能/agent-loop.md)                 | 标准 ReAct 设计原理、PromptBuilder、流式架构                        |
+| [Tool Calling 工具调用系统](docs/核心功能/tool-calling.md)             | 工具接口、并发模型、内置工具详解、扩展指南                                   |
+| [Context Engineering 技术方案](docs/核心功能/context-engineering.md) | SQLiteSession、SummarizationCompactor、Token 估算、并发安全设计    |
+| [Planning 模块实现原理](docs/核心功能/planning.md)                      | Plan Mode、TodoStore、工具层权限控制、自动续跑、停滞检测、跨会话持久化            |
+| [AGENTS.md](AGENTS.md)                                       | 项目开发规范、编码标准、架构决策                                        |
 
 
 ---

@@ -14,6 +14,12 @@ type Summarizer interface {
 	Generate(ctx context.Context, messages []schema.Message, availableTools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error)
 }
 
+// TodoInjector 由 planning.TodoStore 实现，将活跃任务注入上下文压缩摘要。
+// 定义在 memory 包（使用者侧），符合 Go 接口定义惯例。
+type TodoInjector interface {
+	FormatForInjection() string
+}
+
 const (
 	// summaryMarker 用于标识摘要消息，支持在下次压缩时识别并增量更新。
 	summaryMarker = "[Conversation Summary]"
@@ -54,17 +60,31 @@ type SummarizationCompactor struct {
 	MinTailMessages int
 	// Fallback 在 Provider 调用失败时使用。若为 nil，则创建同配置的 TokenBudgetCompactor。
 	Fallback Compactor
+	// TodoInjector 若非 nil，在每次摘要末尾注入活跃任务列表。
+	TodoInjector TodoInjector
+}
+
+// CompactorOption 是 NewSummarizationCompactor 的函数选项。
+type CompactorOption func(*SummarizationCompactor)
+
+// WithTodoInjector 在摘要末尾注入活跃任务列表，防止 LLM 在上下文压缩后遗忘未完成任务。
+func WithTodoInjector(ti TodoInjector) CompactorOption {
+	return func(c *SummarizationCompactor) { c.TodoInjector = ti }
 }
 
 // NewSummarizationCompactor 创建针对指定 context window 大小的 SummarizationCompactor。
 // MaxTokens 自动设为 contextWindow 的 80%；MinTailMessages 默认 6。
-func NewSummarizationCompactor(p Summarizer, contextWindow int) *SummarizationCompactor {
-	return &SummarizationCompactor{
+func NewSummarizationCompactor(p Summarizer, contextWindow int, opts ...CompactorOption) *SummarizationCompactor {
+	c := &SummarizationCompactor{
 		Provider:        p,
 		MaxTokens:       contextWindow * 80 / 100,
 		MinTailMessages: 6,
 		Fallback:        NewTokenBudgetCompactor(contextWindow),
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // Compact 在 token 超出预算时调用 LLM 摘要旧消息，返回压缩后的消息列表。
@@ -92,9 +112,15 @@ func (c *SummarizationCompactor) Compact(msgs []schema.Message) []schema.Message
 		return c.fallback().Compact(msgs)
 	}
 
+	summaryContent := summaryMarker + "\n" + summary
+	if c.TodoInjector != nil {
+		if todoText := c.TodoInjector.FormatForInjection(); todoText != "" {
+			summaryContent += "\n\n## Active Tasks\n" + todoText
+		}
+	}
 	summaryMsg := schema.Message{
 		Role:    schema.RoleUser,
-		Content: summaryMarker + "\n" + summary,
+		Content: summaryContent,
 	}
 
 	result := make([]schema.Message, 0, 2+len(tail))

@@ -20,12 +20,20 @@ import (
 type DefaultPromptBuilder struct {
 	workDir     string
 	skillsIndex *skills.Index
+	todoEnabled bool
 }
 
 // NewPromptBuilder 创建绑定到指定工作目录和 Skills Index 的 PromptBuilder。
 // skillsIndex 为 nil 时，跳过 skills 段落注入。
 func NewPromptBuilder(workDir string, idx *skills.Index) *DefaultPromptBuilder {
 	return &DefaultPromptBuilder{workDir: workDir, skillsIndex: idx}
+}
+
+// WithTodoEnabled 在 system prompt 中添加 todo_write 工具的使用指引。
+// 仅在 todo_write 已注册时调用。
+func (b *DefaultPromptBuilder) WithTodoEnabled(enabled bool) *DefaultPromptBuilder {
+	b.todoEnabled = enabled
+	return b
 }
 
 // Build 组装并返回完整的 System Prompt 字符串。
@@ -62,6 +70,18 @@ func (b *DefaultPromptBuilder) Build() string {
 			"## Available Skills\n\n"+
 				"Use the `use_skill` tool to load the full content of any skill when needed.\n\n"+
 				b.skillsIndex.Summary(),
+		)
+	}
+
+	// 4. Todo 工具使用指引（仅在 todo_write 已注册时注入）
+	if b.todoEnabled {
+		parts = append(parts,
+			"## Task Management\n\n"+
+				"Use the `todo_write` tool to track progress on complex tasks:\n"+
+				"- Call it BEFORE starting any task with 3 or more independent steps\n"+
+				"- Update item status to `in_progress` when you begin a step\n"+
+				"- Update item status to `completed` immediately after finishing each step\n"+
+				"- The todo list persists in the conversation context — keep it accurate",
 		)
 	}
 

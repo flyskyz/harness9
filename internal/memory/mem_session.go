@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/harness9/internal/planning"
 	"github.com/harness9/internal/schema"
 )
 
@@ -57,5 +58,15 @@ func (s *MemorySession) Clear(_ context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.msgs = nil
+	return nil
+}
+
+// GetTodos 内存实现：始终返回空列表（无持久化）。
+func (s *MemorySession) GetTodos(_ context.Context) ([]planning.TodoItem, error) {
+	return nil, nil
+}
+
+// SaveTodos 内存实现：无操作（无持久化）。
+func (s *MemorySession) SaveTodos(_ context.Context, _ []planning.TodoItem) error {
 	return nil
 }

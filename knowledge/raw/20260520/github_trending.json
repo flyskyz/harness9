@@ -1,0 +1,82 @@
+[
+  {
+    "title": "obra/superpowers",
+    "url": "https://github.com/obra/superpowers",
+    "source": "github_trending",
+    "popularity": 198540,
+    "summary": "Superpowers 是一个 Agentic Skills 框架与软件开发方法论，为 AI Agent 提供模块化技能编排能力，支持大规模复杂代码任务的自主完成。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "multica-ai/andrej-karpathy-skills",
+    "url": "https://github.com/multica-ai/andrej-karpathy-skills",
+    "source": "github_trending",
+    "popularity": 138234,
+    "summary": "单文件 CLAUDE.md 配置，通过 Andrej Karpathy 风格的提示工程改善 Claude Code 行为，提升代码质量和推理能力。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents",
+    "source": "github_trending",
+    "popularity": 101725,
+    "summary": "完整的 AI Agency 框架，包含具有独特个性的专家 Agent 集合，支持多 Agent 协作完成复杂任务。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "rtk-ai/rtk",
+    "url": "https://github.com/rtk-ai/rtk",
+    "source": "github_trending",
+    "popularity": 50990,
+    "summary": "Rust 实现的 CLI 代理工具，通过智能压缩和缓存将 LLM 开发命令的 Token 消耗降低 60-90%，显著降低 AI 编码成本。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "microsoft/ai-agents-for-beginners",
+    "url": "https://github.com/microsoft/ai-agents-for-beginners",
+    "source": "github_trending",
+    "popularity": 64442,
+    "summary": "微软出品的 AI Agent 入门课程，共 12 课，覆盖 Agent 开发基础概念、工具调用、记忆管理、多 Agent 协作等核心内容。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "HKUDS/CLI-Anything",
+    "url": "https://github.com/HKUDS/CLI-Anything",
+    "source": "github_trending",
+    "popularity": 37780,
+    "summary": "HKUDS 发布的 CLI-Anything，旨在让所有软件具备 Agent-Native 能力，通过 CLI-Hub 实现工具与 Agent 的无缝集成。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "Alishahryar1/free-claude-code",
+    "url": "https://github.com/Alishahryar1/free-claude-code",
+    "source": "github_trending",
+    "popularity": 26413,
+    "summary": "通过终端、VSCode 扩展或 Discord 提供免费 Claude Code 访问能力，降低 AI 编码工具的使用门槛。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "humanlayer/12-factor-agents",
+    "url": "https://github.com/humanlayer/12-factor-agents",
+    "source": "github_trending",
+    "popularity": 21219,
+    "summary": "借鉴 12-Factor App 理念，提出构建生产级 LLM Agent 的 12 项设计原则，涵盖状态管理、工具设计、人机协作等关键维度。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "tinyhumansai/openhuman",
+    "url": "https://github.com/tinyhumansai/openhuman",
+    "source": "github_trending",
+    "popularity": 21515,
+    "summary": "OpenHuman 是一款私密、简洁、强大的个人 AI 超级智能，基于 Rust 构建，强调本地化运行和用户数据隐私保护。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "anthropics/claude-plugins-official",
+    "url": "https://github.com/anthropics/claude-plugins-official",
+    "source": "github_trending",
+    "popularity": 20264,
+    "summary": "Anthropic 官方维护的 Claude Code 高质量插件目录，提供经过审核的扩展集合，帮助开发者快速集成 Claude 工具生态。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  }
+]

@@ -31,6 +31,18 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
+
+CREATE TABLE IF NOT EXISTS session_todos (
+    id          TEXT    NOT NULL,
+    session_id  TEXT    NOT NULL,
+    content     TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'pending',
+    position    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (id, session_id),
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_todos_session ON session_todos(session_id);
 `
 
 // Manager 持有共享 SQLite 连接，管理所有会话的生命周期。

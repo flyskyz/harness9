@@ -16,8 +16,25 @@ import (
 
 	"github.com/harness9/internal/engine"
 	"github.com/harness9/internal/memory"
+	"github.com/harness9/internal/planning"
 	"github.com/harness9/internal/schema"
 )
+
+// execPrompt 是批准计划后首次触发执行的指令。
+// 只包含行为引导，不声明权限（权限由 filterReadOnlyTools 在工具层硬性控制）。
+const execPrompt = "按照 todo 清单逐项执行。规则：\n" +
+	"1. 每开始一项前，用 todo_write 将其状态设为 in_progress\n" +
+	"2. 用工具完成该项的实际工作——创建文件、写代码、运行命令等；" +
+	"仅更新 todo_write 状态而不调用其他工具，不算完成该项\n" +
+	"3. 确认实际产出后，用 todo_write 将其状态设为 completed\n" +
+	"4. 不要输出进度摘要文字，立即处理下一项\n" +
+	"全部完成后，用一句话汇报整体结果。"
+
+// execContinuePrompt 是自动执行模式下 EventDone 后续跑的指令。
+const execContinuePrompt = "继续处理 todo 清单中下一个 pending 或 in_progress 的任务项。" +
+	"先用 todo_write 标记为 in_progress，然后用工具完成实际工作（写文件、执行命令等），" +
+	"确认产出后标记为 completed，再处理下一项。" +
+	"不要只更新状态而不做实际操作，不要输出进度摘要。"
 
 // builtinCmds 是 TUI 内置的斜杠命令列表（不含 /），用于 Tab 补全和提示。
 var builtinCmds = []struct {
@@ -26,6 +43,7 @@ var builtinCmds = []struct {
 }{
 	{"new", "开启新会话"},
 	{"resume", "恢复历史会话"},
+	{"plan", "进入规划模式分析任务"},
 	{"exit", "退出 TUI"},
 }
 
@@ -65,9 +83,55 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// 审查对话框激活时：数字键 1-4 控制模式选择，其他键忽略
+		if m.planReviewing {
+			switch msg.String() {
+			case "1": // 批准并自动执行
+				m.planReviewing = false
+				m.planMode = planning.PlanModeDefault
+				m.input.Placeholder = "输入任务..."
+				m.autoExecuting = true
+				m.autoExecPrevDone = 0
+				m.autoExecStuck = 0
+				if m.eng != nil {
+					m.eng.SetPlanMode(planning.PlanModeDefault)
+				}
+				m.lines = append(m.lines, dimStyle.Render("  ▶ 批准计划 — 自动执行中"))
+				return m.dispatch(execPrompt)
+			case "2": // 批准并逐步确认编辑
+				m.planReviewing = false
+				m.planMode = planning.PlanModeAutoEdit
+				m.input.Placeholder = "输入任务..."
+				m.autoExecuting = true
+				m.autoExecPrevDone = 0
+				m.autoExecStuck = 0
+				if m.eng != nil {
+					m.eng.SetPlanMode(planning.PlanModeAutoEdit)
+				}
+				m.lines = append(m.lines, dimStyle.Render("  ▶ 批准计划 — 逐步执行中"))
+				return m.dispatch(execPrompt)
+			case "3": // 继续修改计划（保持 Plan Mode）
+				m.planReviewing = false
+				m.input.Placeholder = "继续描述修改意见..."
+				m.input.Focus()
+				return m, textinput.Blink
+			case "4": // 取消
+				m.planReviewing = false
+				m.planMode = planning.PlanModeDefault
+				m.input.Placeholder = "输入任务..."
+				if m.eng != nil {
+					m.eng.SetPlanMode(planning.PlanModeDefault)
+				}
+				m.lines = append(m.lines, dimStyle.Render("  ✗ 已取消计划执行"))
+				m.input.Focus()
+				return m, textinput.Blink
+			}
+			return m, nil
+		}
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyCtrlD:
 			if m.running {
+				m.autoExecuting = false
 				m.cancelFn()
 				return m, nil
 			}
@@ -87,6 +151,14 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running {
 				m = m.cycleCompletion()
 				m.completionHint = m.buildCompletionHint()
+			}
+			return m, nil
+		case tea.KeyShiftTab:
+			if !m.running {
+				m.planMode = m.planMode.Next()
+				if m.eng != nil {
+					m.eng.SetPlanMode(m.planMode)
+				}
 			}
 			return m, nil
 		case tea.KeyEnter:
@@ -123,6 +195,24 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.handleResumeList()
 			}
 
+			// /plan <task> — 进入 Plan Mode 并发送任务
+			// 仅 "/plan"（无任务描述）时：激活 Plan Mode 并提示用户输入任务，不发送请求。
+			if raw == "/plan" || strings.HasPrefix(raw, "/plan ") {
+				task := strings.TrimSpace(strings.TrimPrefix(raw, "/plan"))
+				m.planMode = planning.PlanModePlan
+				if m.eng != nil {
+					m.eng.SetPlanMode(planning.PlanModePlan)
+				}
+				if task == "" {
+					m.lines = append(m.lines, dimStyle.Render("  [PLAN] 已进入规划模式 — 请输入要规划的任务"))
+					m.input.Placeholder = "描述要规划的任务..."
+					m.input.Reset()
+					m.input.Focus()
+					return m, textinput.Blink
+				}
+				raw = task
+			}
+
 			// 处理斜杠命令 / 普通输入
 			prompt, ok := resolvePrompt(raw, m.skillsIndex)
 			if !ok {
@@ -136,29 +226,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lines = append(m.lines, skillStyle.Render("  ◎ 技能已加载: "+name))
 			}
 
-			// 开启 assistant 回复区域
-			m.lines = append(m.lines, assistantStyle.Render("◆ harness9:"), "")
-			m.pendingReplyStart = len(m.lines) - 1 // 指向末尾的空字符串
-			m.pendingReply = ""
-
-			ctx, cancel := context.WithCancel(m.outerCtx)
-			m.cancelFn = cancel
-			m.running = true
-			if m.eng == nil {
-				m.input.Focus()
-				return m, textinput.Blink
-			}
-			m.input.Blur()
-			ch, err := m.eng.RunStream(ctx, prompt)
-			if err != nil {
-				m.lines = append(m.lines, errorStyle.Render("❌ "+err.Error()))
-				m.running = false
-				cancel()
-				m.input.Focus()
-				return m, textinput.Blink
-			}
-			m.eventCh = ch
-			return m, readNextEvent(ch)
+			return m.dispatch(prompt)
 		}
 
 	case eventMsg:
@@ -214,14 +282,27 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 	case engine.EventToolResult:
 		result, _ := evt.Data.(schema.ToolResult)
 		elapsed := time.Since(m.toolStart).Round(time.Millisecond)
+
+		// 工具完成行：展示 tool_name(args摘要) — 耗时
+		summary := summarizeTool(m.currentTool, m.toolArgs)
+		display := m.currentTool
+		if summary != "" {
+			display = fmt.Sprintf("%s(%s)", m.currentTool, summary)
+		}
 		var line string
 		if result.IsError {
-			line = toolErrStyle.Render(fmt.Sprintf("  ✗ %s", m.currentTool)) + dimStyle.Render(fmt.Sprintf(" — %s", elapsed))
+			line = toolErrStyle.Render(fmt.Sprintf("  ✗ %s", display)) + dimStyle.Render(fmt.Sprintf(" — %s", elapsed))
 		} else {
-			line = toolOKStyle.Render(fmt.Sprintf("  ✓ %s", m.currentTool)) + dimStyle.Render(fmt.Sprintf(" — %s", elapsed))
+			line = toolOKStyle.Render(fmt.Sprintf("  ✓ %s", display)) + dimStyle.Render(fmt.Sprintf(" — %s", elapsed))
 		}
 		m.lines = append(m.lines, line)
-		m.pendingReplyStart = len(m.lines) // 下一个回复文本块从这里开始
+
+		// todo_write 完成后，在工具行下方追加最新 todo 快照
+		if m.currentTool == "todo_write" && !result.IsError && m.todoStore != nil {
+			m = m.updateTodoBlock()
+		}
+
+		m.pendingReplyStart = len(m.lines)
 		m.currentTool = ""
 		m.toolArgs = nil
 		return m, readNextEvent(m.eventCh)
@@ -234,6 +315,43 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		m.running = false
 		m.currentTool = ""
 		m.toolArgs = nil
+		// Plan Mode 完成后展示审查对话框
+		if m.planMode == planning.PlanModePlan {
+			m.planReviewing = true
+			return m, nil
+		}
+		// 自动执行模式：若仍有未完成 todo，检测进度后决定是否续跑
+		if m.autoExecuting && m.todoStore != nil {
+			items := m.todoStore.Read()
+			var pending, done int
+			for _, item := range items {
+				switch item.Status {
+				case planning.TodoPending, planning.TodoInProgress:
+					pending++
+				case planning.TodoCompleted:
+					done++
+				}
+			}
+			if pending > 0 {
+				if done > m.autoExecPrevDone {
+					// 有进度：重置停滞计数，继续执行
+					m.autoExecStuck = 0
+				} else {
+					m.autoExecStuck++
+				}
+				if m.autoExecStuck < 3 {
+					m.autoExecPrevDone = done
+					return m.dispatch(execContinuePrompt)
+				}
+				// 连续 3 次无进度，放弃自动执行
+				m.autoExecuting = false
+				m.autoExecStuck = 0
+				m.lines = append(m.lines, dimStyle.Render("  ⚠ 执行停滞，请手动描述下一步"))
+			} else {
+				// 所有 todo 已完成
+				m.autoExecuting = false
+			}
+		}
 		// 纯工具执行无文字回复时，补充完成标记
 		if len(m.lines) > 0 && m.lines[len(m.lines)-1] == "" {
 			m.lines[len(m.lines)-1] = doneStyle.Render("  ✅ 任务完成")
@@ -251,6 +369,7 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		}
 		m.running = false
 		m.currentTool = ""
+		m.autoExecuting = false
 		m.lines = append(m.lines, errorStyle.Render("❌ "+errMsg))
 		m.input.Focus()
 		return m, textinput.Blink
@@ -501,6 +620,36 @@ func summarizeTool(name string, args json.RawMessage) string {
 	}
 }
 
+// dispatch 以指定 prompt 启动一次 agent 推理流。
+// 调用时 running 必须为 false；若已有推理在进行则静默返回，防止并发启动。
+func (m tuiModel) dispatch(prompt string) (tuiModel, tea.Cmd) {
+	if m.running {
+		return m, nil
+	}
+	m.lines = append(m.lines, assistantStyle.Render("◆ harness9:"), "")
+	m.pendingReplyStart = len(m.lines) - 1
+	m.pendingReply = ""
+
+	ctx, cancel := context.WithCancel(m.outerCtx)
+	m.cancelFn = cancel
+	m.running = true
+	if m.eng == nil {
+		m.input.Focus()
+		return m, textinput.Blink
+	}
+	m.input.Blur()
+	ch, err := m.eng.RunStream(ctx, prompt)
+	if err != nil {
+		m.lines = append(m.lines, errorStyle.Render("❌ "+err.Error()))
+		m.running = false
+		cancel()
+		m.input.Focus()
+		return m, textinput.Blink
+	}
+	m.eventCh = ch
+	return m, readNextEvent(ch)
+}
+
 // handleNewSession 创建新会话，替换引擎绑定，刷新状态栏。
 func (m tuiModel) handleNewSession() (tea.Model, tea.Cmd) {
 	if m.manager == nil {
@@ -599,4 +748,18 @@ func (m tuiModel) handleResumeSelection(raw string) (tea.Model, tea.Cmd) {
 	))
 	m.input.Focus()
 	return m, textinput.Blink
+}
+
+// updateTodoBlock 在对话流末尾追加最新 todo 快照。
+// 每次 todo_write 完成后调用，快照追加在工具完成行之后，呈现实时进度。
+func (m tuiModel) updateTodoBlock() tuiModel {
+	if m.todoStore == nil {
+		return m
+	}
+	todoLines := m.renderTodoLines(m.todoStore.Read())
+	if len(todoLines) == 0 {
+		return m
+	}
+	m.lines = append(m.lines, todoLines...)
+	return m
 }

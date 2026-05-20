@@ -1,0 +1,143 @@
+[
+  {
+    "title": "I've joined Anthropic",
+    "url": "https://twitter.com/karpathy/status/2056753169888334312",
+    "source": "hacker_news",
+    "popularity": 1184,
+    "summary": "Andrej Karpathy 宣布加入 Anthropic，这是 2026 年 AI 领域最重大的人才动向之一。Karpathy 曾深度参与 OpenAI 早期核心研究，并长期以清晰的教学风格影响全球 AI 开发者社区。其加入 Anthropic 不仅意味着顶级研究人才的流向，也可能对 Anthropic 的基础模型研究、安全对齐方向及教育生态产生深远影响，在 HN 社区引发极高讨论热度。",
+    "highlights": [
+      "顶级 AI 研究者 Karpathy 从 OpenAI 系转入 Anthropic，行业人才格局重大变动",
+      "HN 热度 1184，是当日评论量最高条目，行业关注度极高",
+      "可能影响 Anthropic 基础研究方向与 AI 教育生态布局",
+      "象征性意义强烈，反映 Anthropic 在顶级人才吸引力上的竞争力提升"
+    ],
+    "score": 9,
+    "tags": ["Anthropic", "Karpathy", "AI人才", "行业动态", "OpenAI"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Gemini 3.5 Flash",
+    "url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-5/",
+    "source": "hacker_news",
+    "popularity": 599,
+    "summary": "Google 发布 Gemini 3.5 Flash，定位新一代高速多模态大模型，专为高频推理场景优化，在速度与能力之间取得新平衡点。Flash 系列一贯以低延迟、低成本著称，3.5 版本的发布进一步加剧了多模态快推理模型的竞争格局，对需要实时 AI 能力的应用开发者具有直接参考价值。",
+    "highlights": [
+      "Google 新一代多模态模型发布，速度与能力平衡进一步优化",
+      "针对高频推理场景专项优化，适合实时 AI 应用场景",
+      "Flash 系列持续迭代，在快推理赛道保持领先竞争力",
+      "对低延迟 AI 应用开发者有直接参考和选型价值"
+    ],
+    "score": 8,
+    "tags": ["Google", "Gemini", "多模态", "大模型", "快推理"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Show HN: Forge – Guardrails take an 8B model from 53% to 99% on agentic tasks",
+    "url": "https://github.com/antoinezambelli/forge",
+    "source": "hacker_news",
+    "popularity": 285,
+    "summary": "Forge 框架通过为 8B 参数量小模型添加结构化 Guardrails 约束，将其在 Agentic 任务上的成功率从 53% 大幅提升至 99%，验证了结构化约束对小模型能力的显著放大效果。这一结果对于希望在本地或低成本环境中部署 Agent 的开发者具有重要启示：合理的约束设计可以弥补模型参数量不足的劣势，使小模型胜任复杂 Agent 任务。",
+    "highlights": [
+      "Guardrails 约束使 8B 模型 Agentic 成功率从 53% 跃升至 99%，提升幅度惊人",
+      "证明结构化约束对小模型能力的放大效果，技术路径可复制",
+      "为低成本、本地化 Agent 部署提供重要工程参考",
+      "挑战了「大模型才能做 Agent」的传统认知，开辟小模型落地新路径"
+    ],
+    "score": 9,
+    "tags": ["Guardrails", "小模型", "Agent", "结构化约束", "性能优化"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Gemini Omni",
+    "url": "https://deepmind.google/models/gemini-omni/",
+    "source": "hacker_news",
+    "popularity": 276,
+    "summary": "Google DeepMind 发布 Gemini Omni，支持文本、图像、音频、视频的统一理解与生成，代表 Google 在全能多模态 AI 方向的最新里程碑。Omni 与 Flash 的同期发布构成 Google 高低端双线布局，全能模型对于需要跨模态理解能力的复杂应用（如视频分析、多媒体内容创作）具有重要价值。",
+    "highlights": [
+      "支持文本、图像、音频、视频四种模态的统一理解与生成",
+      "代表 Google 全能多模态 AI 方向的最新技术水位",
+      "与 Gemini Flash 形成高低端双线布局，覆盖不同场景需求",
+      "对视频分析、多媒体内容创作等跨模态应用具有直接价值"
+    ],
+    "score": 8,
+    "tags": ["Google", "Gemini", "多模态", "视频理解", "全能模型"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "OpenAI Adopts Google's SynthID Watermark for AI Images with Verification Tool",
+    "url": "https://openai.com/index/advancing-content-provenance/",
+    "source": "hacker_news",
+    "popularity": 209,
+    "summary": "OpenAI 宣布采用 Google SynthID 水印技术为 AI 生成图像添加不可见标记，并配套推出内容溯源验证工具。这是 AI 内容真实性标准走向统一的重要信号，OpenAI 与 Google 在内容溯源方向的罕见合作，有望推动业界形成 AI 生成内容标记的事实标准，对内容平台的合规与信任体系建设具有深远影响。",
+    "highlights": [
+      "OpenAI 与 Google 跨竞对合作，共同推进 AI 内容水印标准统一",
+      "SynthID 不可见水印 + 溯源验证工具构成完整内容真实性解决方案",
+      "有望成为 AI 生成内容标记的行业事实标准",
+      "对内容平台、媒体机构的合规与信任体系建设具有重要意义"
+    ],
+    "score": 8,
+    "tags": ["AI水印", "内容溯源", "OpenAI", "SynthID", "内容真实性"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Intro to TLA+ for the LLM Era: Prompt Your Way to Victory",
+    "url": "https://emptysqua.re/blog/intro-to-tla-plus-for-the-llm-era/",
+    "source": "hacker_news",
+    "popularity": 114,
+    "summary": "该文章探索将形式化验证工具 TLA+ 与 LLM 提示工程结合的方法，通过让 LLM 辅助编写和理解 TLA+ 规范，降低分布式系统形式化验证的入门门槛。这一方向将 LLM 的自然语言理解能力与严格的数学验证工具结合，为系统安全性验证提供了新的工程化路径，对构建高可靠性分布式系统的工程师具有参考价值。",
+    "highlights": [
+      "将 LLM 与形式化验证工具 TLA+ 结合，拓展 LLM 在系统安全领域的应用",
+      "通过提示工程降低 TLA+ 的使用门槛，有助于普及形式化验证实践",
+      "为分布式系统规范设计提供 LLM 辅助的新工程路径",
+      "连接 AI 工程与传统系统安全领域，跨领域视角新颖"
+    ],
+    "score": 6,
+    "tags": ["TLA+", "形式化验证", "LLM应用", "分布式系统", "提示工程"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Mistral AI acquires Emmi AI",
+    "url": "https://www.emmi.ai/news/mistral-ai-acquires-emmi-ai",
+    "source": "hacker_news",
+    "popularity": 173,
+    "summary": "Mistral AI 宣布收购 Emmi AI，进一步整合欧洲 AI 能力版图。此次并购被视为欧洲 AI 生态加速整合的信号，Mistral 通过并购扩展技术能力边界，在与美国大模型厂商的竞争中寻求差异化优势。对于关注欧洲 AI 产业格局的从业者，这是值得持续跟踪的行业动态。",
+    "highlights": [
+      "欧洲 AI 生态并购加速，Mistral 扩展能力边界",
+      "反映欧洲 AI 公司通过整合应对美国大模型竞争的策略转变",
+      "Emmi AI 的技术方向将被整合进 Mistral 产品线"
+    ],
+    "score": 5,
+    "tags": ["Mistral", "并购", "欧洲AI", "行业动态", "AI生态"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Remove–AI–Watermarks – CLI and library for removing AI watermarks from images",
+    "url": "https://github.com/wiltodelta/remove-ai-watermarks",
+    "source": "hacker_news",
+    "popularity": 130,
+    "summary": "该开源工具提供移除 AI 生成图像不可见水印（包括 SynthID）的 CLI 和库接口，直接挑战了当日 OpenAI 采用 SynthID 标准的可靠性。这一工具的出现引发了关于 AI 内容溯源技术有效性的广泛讨论，反映出水印方案在技术对抗层面的脆弱性，对依赖水印作为内容真实性保障的政策制定者和平台方是重要警示。",
+    "highlights": [
+      "可移除 SynthID 等主流 AI 水印，直接质疑内容溯源方案的可靠性",
+      "与同日 OpenAI 采用 SynthID 标准形成鲜明对照，引发技术有效性讨论",
+      "揭示水印方案在技术对抗中的脆弱性，对政策制定和平台合规有警示意义"
+    ],
+    "score": 6,
+    "tags": ["AI水印", "内容溯源", "安全攻防", "SynthID", "开源工具"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Gemini CLI will stop working from June 18, 2026",
+    "url": "https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/",
+    "source": "hacker_news",
+    "popularity": 67,
+    "summary": "Google 宣布 Gemini CLI 将于 2026 年 6 月 18 日停止服务，迁移至新的 Antigravity CLI。对于现有 Gemini API 开发者，此次迁移会打断现有工作流，需要在约一个月内完成适配。这是 Google 开发者工具体系整合的组成部分，但较短的迁移窗口期对生产环境用户带来一定迁移压力。",
+    "highlights": [
+      "Gemini CLI 将于 2026-06-18 停服，迁移窗口约一个月，时间紧迫",
+      "迁移至 Antigravity CLI，现有开发者需更新工作流",
+      "反映 Google 开发者工具体系的持续整合重组"
+    ],
+    "score": 5,
+    "tags": ["Gemini CLI", "Google", "开发者工具", "迁移通知", "API变更"],
+    "analysis_date": "2026-05-20"
+  }
+]

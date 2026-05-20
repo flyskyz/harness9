@@ -1,0 +1,74 @@
+[
+  {
+    "title": "I've joined Anthropic",
+    "url": "https://twitter.com/karpathy/status/2056753169888334312",
+    "source": "hacker_news",
+    "popularity": 1184,
+    "summary": "Andrej Karpathy 宣布加入 Anthropic，此消息在 HN 引发广泛讨论，被视为 AI 领域重大人才动向，对 Anthropic 的研究方向和影响力具有深远意义。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "Gemini 3.5 Flash",
+    "url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-5/",
+    "source": "hacker_news",
+    "popularity": 599,
+    "summary": "Google 发布 Gemini 3.5 Flash，新一代多模态大模型，在速度与能力之间取得平衡，针对高频推理场景进行优化。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "Gemini Omni",
+    "url": "https://deepmind.google/models/gemini-omni/",
+    "source": "hacker_news",
+    "popularity": 276,
+    "summary": "Google DeepMind 发布 Gemini Omni 多模态模型，支持文本、图像、音频、视频的统一理解与生成，代表新一代全能 AI 模型方向。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "Show HN: Forge – Guardrails take an 8B model from 53% to 99% on agentic tasks",
+    "url": "https://github.com/antoinezambelli/forge",
+    "source": "hacker_news",
+    "popularity": 285,
+    "summary": "Forge 框架通过为 8B 小模型添加 Guardrails 约束，将其在 Agentic 任务上的成功率从 53% 提升至 99%，展示了结构化约束对小模型能力的显著提升效果。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "OpenAI Adopts Google's SynthID Watermark for AI Images with Verification Tool",
+    "url": "https://openai.com/index/advancing-content-provenance/",
+    "source": "hacker_news",
+    "popularity": 209,
+    "summary": "OpenAI 宣布采用 Google SynthID 水印技术为 AI 生成图像添加不可见标记，并推出内容溯源验证工具，推动 AI 内容真实性标准统一。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "Mistral AI acquires Emmi AI",
+    "url": "https://www.emmi.ai/news/mistral-ai-acquires-emmi-ai",
+    "source": "hacker_news",
+    "popularity": 173,
+    "summary": "Mistral AI 宣布收购 Emmi AI，进一步扩展其 AI 能力版图，此次并购被视为欧洲 AI 生态整合加速的重要信号。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "Remove–AI–Watermarks – CLI and library for removing AI watermarks from images",
+    "url": "https://github.com/wiltodelta/remove-ai-watermarks",
+    "source": "hacker_news",
+    "popularity": 130,
+    "summary": "开源 CLI 工具，可移除 AI 生成图像中的不可见水印（如 SynthID），引发关于 AI 内容溯源技术有效性的广泛讨论。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "Intro to TLA+ for the LLM Era: Prompt Your Way to Victory",
+    "url": "https://emptysqua.re/blog/intro-to-tla-plus-for-the-llm-era/",
+    "source": "hacker_news",
+    "popularity": 114,
+    "summary": "探讨如何将形式化验证工具 TLA+ 与 LLM 结合使用，通过提示工程辅助设计和验证分布式系统规范，拓展 LLM 在系统安全领域的应用边界。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "title": "Gemini CLI will stop working from June 18, 2026",
+    "url": "https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/",
+    "source": "hacker_news",
+    "popularity": 67,
+    "summary": "Google 宣布 Gemini CLI 将于 2026 年 6 月 18 日停止服务，并迁移至新的 Antigravity CLI，影响现有 Gemini API 开发者工作流。",
+    "collected_at": "2026-05-20T00:00:00Z"
+  }
+]

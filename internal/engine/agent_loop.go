@@ -13,6 +13,7 @@ import (
 
 	"github.com/harness9/internal/logfmt"
 	"github.com/harness9/internal/memory"
+	"github.com/harness9/internal/planning"
 	"github.com/harness9/internal/provider"
 	"github.com/harness9/internal/schema"
 	"github.com/harness9/internal/tools"
@@ -64,11 +65,28 @@ func WithCompactor(c memory.Compactor) Option {
 	return func(e *AgentEngine) { e.compactor = c }
 }
 
+// WithPlanMode 设置 Agent 的初始执行模式。
+func WithPlanMode(mode planning.PlanMode) Option {
+	return func(e *AgentEngine) { e.planMode = mode }
+}
+
+// WithTodoStore 绑定 TodoStore，使引擎在 runLoop 生命周期中加载/保存任务列表。
+func WithTodoStore(s *planning.TodoStore) Option {
+	return func(e *AgentEngine) { e.todoStore = s }
+}
+
 // SetSession 替换当前绑定的 Session，供 TUI /new、/resume 命令切换会话时调用。
 // 线程安全：可从任意 goroutine 调用（如 TUI goroutine）。
 func (e *AgentEngine) SetSession(s memory.Session) {
 	e.mu.Lock()
 	e.session = s
+	e.mu.Unlock()
+}
+
+// SetPlanMode 线程安全地更新当前执行模式。TUI Shift+Tab 调用此方法。
+func (e *AgentEngine) SetPlanMode(mode planning.PlanMode) {
+	e.mu.Lock()
+	e.planMode = mode
 	e.mu.Unlock()
 }
 
@@ -83,9 +101,11 @@ type AgentEngine struct {
 	maxConcurrentTools int
 	contextWindow      int // 模型 context window（tokens），用于 TUI 展示，0 表示未知
 	promptBuilder      PromptBuilder
-	mu                 sync.RWMutex     // protects session and compactor
-	session            memory.Session   // 可选，nil 表示无持久化
-	compactor          memory.Compactor // 可选，nil 表示不压缩
+	mu                 sync.RWMutex        // protects session and compactor
+	session            memory.Session      // 可选，nil 表示无持久化
+	compactor          memory.Compactor    // 可选，nil 表示不压缩
+	planMode           planning.PlanMode   // 当前执行模式，影响工具过滤
+	todoStore          *planning.TodoStore // 可选，nil 表示无 planning
 }
 
 // NewAgentEngine 创建新的 AgentEngine。默认值：maxTurns=50, toolTimeout=60s。
@@ -166,9 +186,40 @@ func (e *AgentEngine) runLoop(ctx context.Context, userPrompt string, logPrefix 
 	e.mu.RLock()
 	sess := e.session
 	comp := e.compactor
+	planMode := e.planMode
+	todoStore := e.todoStore
 	e.mu.RUnlock()
 
+	// 启动时从 Session 恢复 TodoStore 状态（跨会话续接未完成任务）。
+	if sess != nil && todoStore != nil {
+		if todos, err := sess.GetTodos(ctx); err != nil {
+			log.Print(logfmt.FormatMsg(logPrefix, fmt.Sprintf("加载 todos 失败: %v", err)))
+		} else {
+			todoStore.Write(todos)
+		}
+	}
+
+	// Plan Mode：注入规划行为约束（write_file/edit_file 已由 filterReadOnlyTools 在工具层硬性过滤，
+	// 此处只补充 bash 只读限制和 todo_write 输出要求等无法在工具层表达的行为规则）。
+	if planMode == planning.PlanModePlan {
+		userPrompt = "分析以下请求，用 todo_write 输出一份可直接执行的实现计划，然后用纯文字简述计划后停止。\n" +
+			"todo 项要求：每条对应一个具体的实现动作（例如：创建某文件、实现某函数、运行某命令），\n" +
+			"而非高层规划描述（禁止写\"需求澄清\"、\"方案设计\"之类无法直接执行的条目）。\n" +
+			"如需了解当前代码库，可使用 read_file 或 bash（只读命令：ls、cat、find、grep）。\n" +
+			"不要创建文件、执行 build/install 或做任何实际修改。\n\n" +
+			userPrompt
+	}
+
 	contextHistory, startLen := e.loadHistoryWith(ctx, userPrompt, sess)
+
+	// 结束时将 TodoStore 持久化到 Session（write-replace）。
+	defer func() {
+		if sess != nil && todoStore != nil {
+			if err := sess.SaveTodos(ctx, todoStore.Read()); err != nil {
+				log.Print(logfmt.FormatMsg(logPrefix, fmt.Sprintf("保存 todos 失败: %v", err)))
+			}
+		}
+	}()
 
 	turnCount := 0
 	overallStart := time.Now()
@@ -186,6 +237,9 @@ func (e *AgentEngine) runLoop(ctx context.Context, userPrompt string, logPrefix 
 		}
 
 		availableTools := e.registry.GetAvailableTools()
+		if planMode == planning.PlanModePlan {
+			availableTools = filterReadOnlyTools(availableTools)
+		}
 		toolTokens := memory.EstimateToolTokens(availableTools)
 
 		// Preflight token check: estimate tokens before and after compaction.
@@ -314,6 +368,26 @@ func (e *AgentEngine) saveHistoryWith(ctx context.Context, sess memory.Session, 
 	if err := sess.AddMessages(ctx, newMsgs); err != nil {
 		log.Print(logfmt.FormatMsg("engine", fmt.Sprintf("保存会话历史失败: %v", err)))
 	}
+}
+
+// planModeWhitelist 是 Plan Mode 下允许 LLM 调用的工具名称集合。
+// 包含 todo_write：Plan Mode 的核心目标是让 LLM 通过 todo_write 输出结构化计划。
+var planModeWhitelist = map[string]bool{
+	"read_file":  true,
+	"bash":       true,
+	"use_skill":  true,
+	"todo_write": true,
+}
+
+// filterReadOnlyTools 返回 tools 中属于 planModeWhitelist 的子集。
+func filterReadOnlyTools(tools []schema.ToolDefinition) []schema.ToolDefinition {
+	var result []schema.ToolDefinition
+	for _, t := range tools {
+		if planModeWhitelist[t.Name] {
+			result = append(result, t)
+		}
+	}
+	return result
 }
 
 // executeTools 并发执行所有工具调用，每个工具带有独立的超时控制。

@@ -1,0 +1,161 @@
+[
+  {
+    "title": "obra/superpowers",
+    "url": "https://github.com/obra/superpowers",
+    "source": "github_trending",
+    "popularity": 198540,
+    "summary": "Superpowers 是一个专为 AI Agent 设计的模块化技能（Skills）框架与软件开发方法论。其核心理念是将复杂工程能力拆解为可复用的技能单元，由 Agent 按需编排组合，使 AI 能够自主完成大规模、跨模块的代码任务。该框架热度极高，在 GitHub Trending 榜首位置出现，说明社区对 Agentic 编程模式的关注度持续攀升，有望成为下一代 AI 编码工作流的基础设施组件。",
+    "highlights": [
+      "模块化技能编排：将工程能力拆分为独立技能单元，Agent 可按需组合调用",
+      "针对大规模复杂代码任务优化，支持跨模块自主完成",
+      "GitHub 热度极高（popularity 198540），社区关注度跻身当日全站前列",
+      "推动 Agentic 软件开发方法论从实验走向工程化实践"
+    ],
+    "score": 9,
+    "tags": ["Agent", "Skills", "代码自动化", "框架", "Agentic编程"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "multica-ai/andrej-karpathy-skills",
+    "url": "https://github.com/multica-ai/andrej-karpathy-skills",
+    "source": "github_trending",
+    "popularity": 138234,
+    "summary": "该项目将 Andrej Karpathy 的编程风格和教学哲学浓缩为一个单文件 CLAUDE.md 配置，通过提示工程手段系统性地改善 Claude Code 的代码生成行为，在可读性、注释风格、推理步骤等维度上贴近 Karpathy 的高质量代码标准。项目简洁直接，但实际效果被社区广泛验证，成为 Claude Code 用户提升输出质量的流行配置方案。",
+    "highlights": [
+      "单文件设计，零成本接入 Claude Code 工作流",
+      "通过提示工程系统性改善代码生成质量，对标 Karpathy 风格",
+      "热度 138234，跻身当日 GitHub 热榜前三，社区验证效果显著",
+      "为 CLAUDE.md / Agent 配置文件的最佳实践提供参考范本"
+    ],
+    "score": 7,
+    "tags": ["提示工程", "Claude Code", "CLAUDE.md", "代码质量", "Karpathy"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents",
+    "source": "github_trending",
+    "popularity": 101725,
+    "summary": "Agency Agents 是一个完整的 AI Agency 框架，内置多个具有独特个性设定的专家 Agent，各 Agent 在角色分工上模拟真实创意机构的协作模式，支持多 Agent 并发协同完成复杂创意和工程任务。框架强调 Agent 间的角色差异化与协作协议设计，在多 Agent 系统架构方向具有参考价值。",
+    "highlights": [
+      "提供完整的多 Agent 协作框架，内置个性化专家 Agent 集合",
+      "模拟真实创意机构协作模式，角色分工明确",
+      "热度突破 10 万，说明多 Agent 系统需求持续增长",
+      "可作为构建 AI Agency 类产品的工程参考实现"
+    ],
+    "score": 7,
+    "tags": ["多Agent", "Agent协作", "框架", "AI Agency", "角色编排"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "rtk-ai/rtk",
+    "url": "https://github.com/rtk-ai/rtk",
+    "source": "github_trending",
+    "popularity": 50990,
+    "summary": "RTK 是一款基于 Rust 的 CLI 代理工具，通过智能压缩上下文和缓存重复内容，将 LLM 开发命令的 Token 消耗降低 60-90%。对于高频使用 AI 编码工具的开发者而言，成本节约效果十分显著。Rust 实现保证了极低的性能开销，工具可透明介入现有 LLM CLI 工作流，无需修改业务代码。",
+    "highlights": [
+      "Token 消耗降低 60-90%，直接降低 AI 编码工具的经济成本",
+      "Rust 实现，性能开销极低，可透明接入现有工作流",
+      "智能上下文压缩与缓存双策略，工程化程度高",
+      "热度近 5 万，实用性获社区广泛认可"
+    ],
+    "score": 8,
+    "tags": ["Token优化", "成本控制", "Rust", "CLI工具", "上下文压缩"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "microsoft/ai-agents-for-beginners",
+    "url": "https://github.com/microsoft/ai-agents-for-beginners",
+    "source": "github_trending",
+    "popularity": 64442,
+    "summary": "微软官方出品的 AI Agent 入门课程，共 12 课，系统覆盖 Agent 开发全链路：从基础概念、工具调用、记忆管理到多 Agent 协作，内容深度适合初学者快速建立完整认知框架。作为微软背书的教学资源，内容质量有保障，且持续更新，是目前最权威的 Agent 入门材料之一。",
+    "highlights": [
+      "微软官方出品，内容权威可靠，持续维护更新",
+      "12 课完整体系，覆盖 Agent 开发全链路核心内容",
+      "涵盖工具调用、记忆管理、多 Agent 协作等关键模块",
+      "热度 64442，是入门 Agent 开发的高质量参考资料"
+    ],
+    "score": 7,
+    "tags": ["教程", "Agent入门", "微软", "工具调用", "多Agent"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "HKUDS/CLI-Anything",
+    "url": "https://github.com/HKUDS/CLI-Anything",
+    "source": "github_trending",
+    "popularity": 37780,
+    "summary": "HKUDS 推出 CLI-Anything，核心目标是让所有软件具备 Agent-Native 能力，通过统一的 CLI-Hub 接口实现任意工具与 AI Agent 的无缝集成。该方案将 CLI 工具的能力统一抽象为 Agent 可调用的工具接口，为构建通用 Agent 工具生态提供了可行的底层路径。对于希望将现有 CLI 工具 Agent 化的团队具有较高实用价值。",
+    "highlights": [
+      "提供统一 CLI-Hub 接口，让任意 CLI 工具具备 Agent-Native 能力",
+      "无需改造现有工具，降低 Agent 化迁移成本",
+      "HKUDS 团队出品，具备一定学术背景支撑",
+      "为构建通用 Agent 工具生态提供基础设施思路"
+    ],
+    "score": 7,
+    "tags": ["Agent工具", "CLI集成", "Agent-Native", "工具生态", "HKUDS"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "humanlayer/12-factor-agents",
+    "url": "https://github.com/humanlayer/12-factor-agents",
+    "source": "github_trending",
+    "popularity": 21219,
+    "summary": "12-Factor Agents 借鉴经典的 12-Factor App 方法论，为构建生产级 LLM Agent 提出 12 项系统性设计原则，涵盖状态管理、工具设计、人机协作接口等关键维度。该框架将 Agent 工程实践提升到方法论层面，对从事 Agent 生产化部署的团队具有直接指导价值，是 Agent 工程化方向的重要参考文档。",
+    "highlights": [
+      "系统提出生产级 Agent 的 12 项设计原则，方法论完整",
+      "覆盖状态管理、工具设计、人机协作等生产化核心挑战",
+      "借鉴 12-Factor App 成熟框架，工程化思路清晰",
+      "对 Agent 生产部署团队具有直接实践指导价值"
+    ],
+    "score": 8,
+    "tags": ["Agent工程化", "最佳实践", "生产级Agent", "方法论", "人机协作"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "tinyhumansai/openhuman",
+    "url": "https://github.com/tinyhumansai/openhuman",
+    "source": "github_trending",
+    "popularity": 21515,
+    "summary": "OpenHuman 定位为私密、简洁的个人 AI 超级智能，基于 Rust 构建，强调完全本地化运行和用户数据隐私保护。在云端 AI 服务数据隐忧日益突出的背景下，本地优先的 AI 助手方向具有独特市场价值。Rust 技术栈保证性能与安全性，项目理念契合对数据主权有高要求的用户群体。",
+    "highlights": [
+      "完全本地化运行，数据不上云，隐私保护设计优先",
+      "Rust 构建，性能高效，安全性强",
+      "定位个人超级智能，功能定位明确",
+      "契合对数据隐私有高要求的开发者和企业用户需求"
+    ],
+    "score": 6,
+    "tags": ["本地AI", "隐私保护", "Rust", "个人助手", "数据主权"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "anthropics/claude-plugins-official",
+    "url": "https://github.com/anthropics/claude-plugins-official",
+    "source": "github_trending",
+    "popularity": 20264,
+    "summary": "Anthropic 官方维护的 Claude Code 插件目录，收录经过审核的高质量扩展，帮助开发者快速发现和集成 Claude 工具生态中的优质组件。官方维护意味着插件质量和兼容性有较强保障，对 Claude Code 用户来说是快速扩展工具能力的重要资源入口。",
+    "highlights": [
+      "Anthropic 官方维护，插件质量经过审核保障",
+      "降低优质插件的发现成本，加速 Claude 工具生态建设",
+      "为 Claude Code 用户提供可信的能力扩展渠道",
+      "官方生态背书，相比社区插件有更强的可靠性保证"
+    ],
+    "score": 6,
+    "tags": ["Claude Code", "插件生态", "Anthropic", "工具扩展", "官方资源"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Alishahryar1/free-claude-code",
+    "url": "https://github.com/Alishahryar1/free-claude-code",
+    "source": "github_trending",
+    "popularity": 26413,
+    "summary": "该项目通过终端、VSCode 扩展和 Discord 多渠道提供免费 Claude Code 访问能力，显著降低了 AI 编码工具的使用门槛。对于无法承担订阅费用的开发者而言具有一定实用价值，但其长期可持续性和合规性存在不确定因素，技术信息量相对有限。",
+    "highlights": [
+      "多渠道免费访问 Claude Code，降低使用门槛",
+      "支持终端、VSCode 扩展、Discord 三种接入方式",
+      "热度 26413，反映社区对低成本 AI 工具的强烈需求"
+    ],
+    "score": 4,
+    "tags": ["Claude Code", "免费工具", "VSCode", "降低门槛"],
+    "analysis_date": "2026-05-20"
+  }
+]

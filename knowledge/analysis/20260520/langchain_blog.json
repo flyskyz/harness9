@@ -1,0 +1,223 @@
+[
+  {
+    "title": "Everything we shipped at Interrupt",
+    "url": "https://www.langchain.com/blog/interrupt-2026-overview",
+    "source": "langchain_blog",
+    "popularity": 6,
+    "summary": "Interrupt 2026 大会发布汇总全面展示了 LangChain 在企业级 Agent 平台方向的战略布局：自主调试、一键部署、Delta Channels 状态管理、LangSmith Engine 自动改进、SmithDB 可观测性数据库等重大功能集中亮相。这次发布标志着 LangChain 从开发框架全面向企业级 Agent 运行时平台转型，覆盖 Agent 开发、部署、监控、改进的完整生命周期闭环。",
+    "highlights": [
+      "Interrupt 2026 集中发布多项重大功能，标志 LangChain 向企业级 Agent 平台全面升级",
+      "Delta Channels、LangSmith Engine、SmithDB、Sandboxes 等形成完整 Agent 平台矩阵",
+      "覆盖开发、部署、监控、自动改进的 Agent 完整生命周期闭环",
+      "战略意图清晰：从工具框架向端到端 Agent 运行时平台转型"
+    ],
+    "score": 9,
+    "tags": ["LangChain", "Interrupt2026", "Agent平台", "企业级", "生态发布"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "How We Built LangSmith Engine: Our Agent for Improving Agents",
+    "url": "https://www.langchain.com/blog/how-we-built-langsmith-engine-our-agent-for-improving-agents",
+    "source": "langchain_blog",
+    "popularity": 6,
+    "summary": "LangSmith Engine 是一个用于自动改进生产 Agent 的元 Agent，通过持续监控生产 Trace、将失败案例聚类为命名问题、自动生成修复建议，构建 Agent 自我改善的自动化闭环。该文章详细拆解了其技术实现路径，对希望构建 Agent 自动评估与迭代系统的工程团队具有极高参考价值，代表 Agent 可观测性向主动改进演进的前沿实践。",
+    "highlights": [
+      "构建 Agent 自动改进闭环：监控 Trace → 聚类失败 → 生成修复建议",
+      "元 Agent 架构设计，用 Agent 改进 Agent，创新性强",
+      "详细拆解技术实现，工程参考价值高",
+      "代表 Agent 可观测性从被动监控向主动自动改进演进的前沿方向"
+    ],
+    "score": 9,
+    "tags": ["LangSmith", "Agent自动改进", "可观测性", "元Agent", "生产监控"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Delta Channels: How We're Evolving our Runtime for Long-Running Agents",
+    "url": "https://www.langchain.com/blog/delta-channels-evolving-agent-runtime",
+    "source": "langchain_blog",
+    "popularity": 6,
+    "summary": "Delta Channels 是 LangChain 为长时运行 Agent 设计的新型检查点机制，仅存储状态变更差量而非完整状态快照，配合周期性完整快照，显著降低存储开销并提升故障恢复效率。这一技术方案直接解决了长任务 Agent 状态管理的工程痛点，对于需要运行数小时乃至数天的 Agent 系统而言是关键基础设施改进。",
+    "highlights": [
+      "差量存储检查点机制，显著降低长时 Agent 的存储开销",
+      "结合周期性完整快照，兼顾存储效率与快速恢复能力",
+      "直接解决长任务 Agent 状态管理的核心工程痛点",
+      "为生产级长时 Agent 部署提供可靠的状态持久化基础设施"
+    ],
+    "score": 8,
+    "tags": ["Delta Channels", "检查点", "长时Agent", "状态管理", "LangChain"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "New in Deep Agents v0.6",
+    "url": "https://www.langchain.com/blog/deep-agents-0-6",
+    "source": "langchain_blog",
+    "popularity": 6,
+    "summary": "Deep Agents 0.6 版本新增代码解释器、Harness 配置文件、Streaming v3 和 Delta Channels 四项重要功能。代码解释器扩展 Agent 的执行能力边界，Harness 配置文件规范化 Agent 行为描述，Streaming v3 改善实时响应体验，Delta Channels 提升长任务稳定性。版本迭代节奏快，功能方向明确，对 Deep Agents 用户有直接升级参考价值。",
+    "highlights": [
+      "新增代码解释器，显著扩展 Agent 的自主执行能力边界",
+      "Harness 配置文件引入，规范化 Agent 行为描述与复用",
+      "Streaming v3 + Delta Channels 双升级，提升长任务稳定性与实时体验",
+      "迭代节奏快，功能方向对齐生产化 Agent 核心需求"
+    ],
+    "score": 8,
+    "tags": ["Deep Agents", "代码解释器", "Streaming", "LangChain", "版本更新"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "We built SmithDB, the data layer for agent observability",
+    "url": "https://www.langchain.com/blog/introducing-smithdb",
+    "source": "langchain_blog",
+    "popularity": 2,
+    "summary": "SmithDB 是 LangSmith 专为 Agent 可观测性设计的分布式数据库，查询速度较通用数据库（如 PostgreSQL）最高提升 12 倍，能够高效支撑大规模生产 Trace 的存储与实时分析。专用数据库的设计充分考虑了 Agent Trace 数据的特殊结构特征（树状调用链、大量嵌套 JSON），是 LangSmith 可观测性平台能力提升的核心基础设施。",
+    "highlights": [
+      "专为 Agent Trace 优化的分布式数据库，查询速度最高提升 12 倍",
+      "针对树状调用链和嵌套 JSON 等 Agent 数据特征专项优化",
+      "是 LangSmith 可观测性平台高性能的核心基础设施支撑",
+      "为大规模生产 Agent 部署的 Trace 分析提供可靠数据层"
+    ],
+    "score": 8,
+    "tags": ["SmithDB", "可观测性", "数据库", "Agent Trace", "LangSmith"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "LangSmith LLM Gateway: runtime governance built into the agent lifecycle",
+    "url": "https://www.langchain.com/blog/introducing-llm-gateway",
+    "source": "langchain_blog",
+    "popularity": 2,
+    "summary": "LangSmith LLM Gateway 将运行时治理能力内嵌于 Agent 生命周期，提供费用限额控制、PII 脱敏和 Trace 连续性三项核心功能。对于在企业环境中部署 Agent 的团队，这些能力解决了成本失控、数据合规和链路追踪三大生产化痛点，是 LangSmith 向企业级安全合规方向延伸的重要能力。",
+    "highlights": [
+      "费用限额、PII 脱敏、Trace 连续性三合一运行时治理",
+      "将安全合规能力内嵌 Agent 生命周期，无需外部改造",
+      "直接解决企业 Agent 部署的成本控制与数据合规核心痛点",
+      "是 LangSmith 企业级平台化的关键能力补齐"
+    ],
+    "score": 8,
+    "tags": ["LLM Gateway", "运行时治理", "合规", "PII脱敏", "LangSmith"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Tuning Deep Agents to Work Well with Different Models",
+    "url": "https://www.langchain.com/blog/tuning-deep-agents-different-models",
+    "source": "langchain_blog",
+    "popularity": 6,
+    "summary": "该文章介绍通过模型专属配置文件（Model-Specific Profiles）机制，为不同厂商 LLM 定制 Deep Agents 的行为参数，在多个主流模型上取得显著性能提升。这一实践揭示了通用 Agent 框架在多模型适配上的工程挑战，以及通过配置化而非硬编码解决跨模型兼容性问题的有效方法，对构建多模型 Agent 系统的团队具有直接参考价值。",
+    "highlights": [
+      "模型专属配置文件机制，以配置化方式解决跨模型兼容性问题",
+      "在多个主流 LLM 上验证性能提升，工程可复制性强",
+      "揭示通用 Agent 框架多模型适配的核心工程挑战与解法",
+      "对构建多模型 Agent 系统的团队具有直接实践参考价值"
+    ],
+    "score": 7,
+    "tags": ["Deep Agents", "多模型适配", "模型配置", "LangChain", "性能调优"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Managed Deep Agents: the fastest way to ship a production deep agent",
+    "url": "https://www.langchain.com/blog/introducing-managed-deep-agents",
+    "source": "langchain_blog",
+    "popularity": 1,
+    "summary": "Managed Deep Agents 托管服务让开发者无需管理底层基础设施即可快速部署生产级长时 Agent，内置持久化执行引擎和可观测性，显著降低 Agent 生产化的运维复杂度。对于希望快速验证 Agent 业务价值而不想陷入基础设施管理的团队，这是最低阻力的生产化路径。",
+    "highlights": [
+      "全托管 Agent 运行时，零基础设施管理负担",
+      "内置持久化执行引擎，天然支持长时任务运行",
+      "内置可观测性，开箱即得生产级监控能力",
+      "最低阻力的生产级 Agent 部署路径，加速业务验证"
+    ],
+    "score": 7,
+    "tags": ["Managed Agent", "托管服务", "LangChain", "生产部署", "长时Agent"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "The Anatomy of an Agent Harness",
+    "url": "https://www.langchain.com/blog/the-anatomy-of-an-agent-harness",
+    "source": "langchain_blog",
+    "popularity": 1,
+    "summary": "该文章深度解析 Agent Harness 的组成结构与设计原理，说明 Harness 如何将 AI 模型转化为具备工具调用、记忆管理和任务编排能力的自主工作引擎。内容覆盖 Harness 各核心模块的职责边界、交互协议和设计权衡，对理解和构建 Agent 基础设施的工程师具有高度参考价值，是 Agent Harness 架构设计的优质学习材料。",
+    "highlights": [
+      "系统解析 Agent Harness 各核心模块的职责边界与交互协议",
+      "阐明 Harness 将 LLM 转化为自主 Agent 的工程化机制",
+      "涵盖工具调用、记忆管理、任务编排等核心设计维度",
+      "对理解和构建 Agent 基础设施有高度参考价值"
+    ],
+    "score": 7,
+    "tags": ["Agent Harness", "架构设计", "工具调用", "记忆管理", "LangChain"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "The Agent Development Lifecycle",
+    "url": "https://www.langchain.com/blog/the-agent-development-lifecycle",
+    "source": "langchain_blog",
+    "popularity": 1,
+    "summary": "Harrison Chase 系统阐述 Agent 开发生命周期模型，从原型设计到生产部署，重点强调评测驱动迭代和持续可观测性的核心地位。文章构建了一套可操作的 Agent 工程方法论，将 Agent 研发流程规范化，对希望建立体系化 Agent 开发流程的团队和个人有重要指导意义。",
+    "highlights": [
+      "Harrison Chase 亲述，权威性强，方法论完整",
+      "强调评测驱动迭代，将可观测性贯穿开发全生命周期",
+      "从原型到生产的完整路径，可操作性强",
+      "有助于团队建立体系化的 Agent 工程研发规范"
+    ],
+    "score": 7,
+    "tags": ["Agent开发", "生命周期", "评测", "可观测性", "LangChain"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "LangSmith Sandboxes are Generally Available",
+    "url": "https://www.langchain.com/blog/langsmith-sandboxes-generally-available",
+    "source": "langchain_blog",
+    "popularity": 1,
+    "summary": "LangSmith Sandboxes 正式 GA，基于内核级隔离 microVM 技术，提供快照、并行 Fork、服务 URL 和认证代理等功能，为 Agent 代码执行提供安全隔离环境。GA 意味着该功能已经过充分生产验证，对于需要在 Agent 中安全执行用户提供代码的场景（如代码解释器），Sandboxes 是重要的基础设施保障。",
+    "highlights": [
+      "基于 microVM 内核级隔离，安全性有充分工程保障",
+      "支持快照与并行 Fork，适合 Agent 并发代码执行场景",
+      "正式 GA，生产稳定性经过验证，可放心用于生产环境",
+      "为代码解释器等高风险执行场景提供关键安全基础设施"
+    ],
+    "score": 7,
+    "tags": ["Sandboxes", "代码隔离", "microVM", "LangSmith", "安全执行"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Introducing LangSmith Context Hub",
+    "url": "https://www.langchain.com/blog/introducing-context-hub",
+    "source": "langchain_blog",
+    "popularity": 1,
+    "summary": "LangSmith Context Hub 提供集中化的 Prompt、文档和 Agent 配置文件管理平台，支持版本控制和团队协作，解决多人协作场景下 Agent 配置管理混乱的问题。对于拥有多个 Agent 产品线的团队，Context Hub 是统一管理 AI 行为配置的重要工具，有助于提升配置可复用性和团队协作效率。",
+    "highlights": [
+      "集中管理 Prompt、文档和 Agent 配置，解决多人协作配置混乱问题",
+      "内置版本控制，支持配置变更追踪和回滚",
+      "适合拥有多 Agent 产品线的团队统一管理 AI 行为配置"
+    ],
+    "score": 6,
+    "tags": ["Context Hub", "Prompt管理", "版本控制", "团队协作", "LangSmith"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Introducing LangChain Labs",
+    "url": "https://www.langchain.com/blog/introducing-langchain-labs",
+    "source": "langchain_blog",
+    "popularity": 1,
+    "summary": "LangChain 宣布成立 Labs 应用研究部门，专注于 Agent 持续学习方向的前沿探索，研究如何让 Agent 在运行过程中自主积累经验并持续改进自身能力。这一方向代表 Agent 从执行工具向自主学习实体演进的长期愿景，虽然目前仍处于早期研究阶段，但方向性意义重大。",
+    "highlights": [
+      "成立专门应用研究部门，聚焦 Agent 持续学习前沿方向",
+      "探索 Agent 运行中自主积累经验的机制，方向性意义重大",
+      "代表 Agent 从执行工具向自主学习实体演进的长期愿景"
+    ],
+    "score": 6,
+    "tags": ["LangChain Labs", "持续学习", "Agent研究", "前沿方向", "自主学习"],
+    "analysis_date": "2026-05-20"
+  },
+  {
+    "title": "Introducing LangSmith Engine",
+    "url": "https://www.langchain.com/blog/introducing-langsmith-engine",
+    "source": "langchain_blog",
+    "popularity": 1,
+    "summary": "LangSmith Engine 通过监控生产 Trace、将失败案例自动聚类为命名问题、推送修复建议，构建 Agent 持续改进的自动化闭环。作为独立介绍文章，内容与「How We Built LangSmith Engine」有一定重叠，侧重功能能力介绍而非技术实现细节，适合快速了解产品定位与核心功能。",
+    "highlights": [
+      "自动化 Agent 改进闭环：Trace 监控 → 失败聚类 → 修复建议推送",
+      "将 Agent 可观测性与自动改进能力融为一体",
+      "产品层面清晰阐述功能定位，适合快速了解产品价值"
+    ],
+    "score": 6,
+    "tags": ["LangSmith Engine", "自动改进", "可观测性", "Agent", "LangChain"],
+    "analysis_date": "2026-05-20"
+  }
+]

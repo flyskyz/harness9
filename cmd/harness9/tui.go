@@ -14,6 +14,7 @@ import (
 
 	"github.com/harness9/internal/engine"
 	"github.com/harness9/internal/memory"
+	"github.com/harness9/internal/planning"
 	"github.com/harness9/internal/skills"
 )
 
@@ -48,6 +49,19 @@ var (
 	cyanStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
 	brandStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true)
 	sepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
+
+	// Plan Mode 色调 — 琥珀黄色系，替换默认青色系
+	planAccentStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	planStatusBarStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("94")).
+				Foreground(lipgloss.Color("220")).
+				Padding(0, 1)
+	planModeLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Bold(true)
+	planReviewBoxStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("208")).
+				Padding(0, 2).
+				Width(50)
 
 	// token 使用率颜色（绿/黄/红，按使用量变化）
 	tokenOKStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // < 50%: 绿
@@ -130,10 +144,22 @@ type tuiModel struct {
 	// /resume 选择模式
 	resumeSelecting bool
 	resumeSessions  []memory.SessionInfo
+
+	// Todo 跟踪
+	todoStore *planning.TodoStore
+
+	// Plan Mode 状态
+	planMode      planning.PlanMode
+	planReviewing bool // Plan Mode 完成后展示审查对话框
+
+	// 自动执行状态（选项 1/2 批准后激活）
+	autoExecuting    bool // true = EventDone 时若有剩余 todo 自动续跑
+	autoExecPrevDone int  // 上次 dispatch 启动时已完成的 todo 数，用于检测进度停滞
+	autoExecStuck    int  // 连续无进度的 dispatch 次数，达到 3 次后放弃
 }
 
 // newTUIModel 构造已初始化的 tuiModel：输入框聚焦，spinner 使用 Dot 样式。
-func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, mgr *memory.Manager, sess memory.Session, outerCtx context.Context, workDir, modelName string) tuiModel {
+func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, mgr *memory.Manager, sess memory.Session, todoStore *planning.TodoStore, outerCtx context.Context, workDir, modelName string) tuiModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
@@ -144,17 +170,20 @@ func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, mgr *memory.Manager
 	ti.Focus()
 
 	m := tuiModel{
-		workDir:     workDir,
-		modelName:   modelName,
-		spinner:     sp,
-		input:       ti,
-		outerCtx:    outerCtx,
-		eng:         eng,
-		skillsIndex: idx,
-		viewTop:     -1, // -1 = 自动跟随底部
-		phase:       phaseWelcome,
-		manager:     mgr,
-		session:     sess,
+		workDir:       workDir,
+		modelName:     modelName,
+		spinner:       sp,
+		input:         ti,
+		outerCtx:      outerCtx,
+		eng:           eng,
+		skillsIndex:   idx,
+		viewTop:       -1, // -1 = 自动跟随底部
+		phase:         phaseWelcome,
+		manager:       mgr,
+		session:       sess,
+		todoStore:     todoStore,
+		planMode:      planning.PlanModeDefault,
+		planReviewing: false,
 	}
 	if sess != nil {
 		m.sessionID = sess.SessionID()
@@ -169,13 +198,13 @@ func (m tuiModel) Init() tea.Cmd {
 
 // RunTUI 以 AltScreen 模式启动 Bubbletea 程序。
 // 用户按 Ctrl-C/Ctrl-D（空闲时）退出后返回。
-func RunTUI(ctx context.Context, eng *engine.AgentEngine, mgr *memory.Manager, sess memory.Session, idx *skills.Index, workDir, modelName string) error {
+func RunTUI(ctx context.Context, eng *engine.AgentEngine, mgr *memory.Manager, sess memory.Session, idx *skills.Index, todoStore *planning.TodoStore, workDir, modelName string) error {
 	// TUI 独占终端，将内部日志重定向到静默，避免污染 AltScreen 输出。
 	// 退出后恢复原 Writer，避免影响同进程其他逻辑（如测试框架）。
 	origWriter := log.Writer()
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(origWriter)
-	m := newTUIModel(eng, idx, mgr, sess, ctx, workDir, modelName)
+	m := newTUIModel(eng, idx, mgr, sess, todoStore, ctx, workDir, modelName)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err

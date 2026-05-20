@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/harness9/internal/planning"
 	"github.com/harness9/internal/schema"
 )
 
@@ -173,4 +174,56 @@ func (s *SQLiteSession) Clear(ctx context.Context) error {
 		return fmt.Errorf("清空消息: %w", err)
 	}
 	return nil
+}
+
+// GetTodos 返回该会话已持久化的任务列表，按 position 升序排列。
+func (s *SQLiteSession) GetTodos(ctx context.Context) ([]planning.TodoItem, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, content, status FROM session_todos
+		 WHERE session_id = ? ORDER BY position ASC`,
+		s.sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("查询 todos: %w", err)
+	}
+	defer rows.Close()
+
+	var items []planning.TodoItem
+	for rows.Next() {
+		var item planning.TodoItem
+		var statusStr string
+		if err := rows.Scan(&item.ID, &item.Content, &statusStr); err != nil {
+			return nil, fmt.Errorf("扫描 todo: %w", err)
+		}
+		item.Status = planning.TodoStatus(statusStr)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("迭代 todos: %w", err)
+	}
+	return items, nil
+}
+
+// SaveTodos 原子性保存任务列表（write-replace 语义）。
+// 事务内先删除该会话所有旧 todos，再全量插入新列表。
+func (s *SQLiteSession) SaveTodos(ctx context.Context, items []planning.TodoItem) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("开始事务: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM session_todos WHERE session_id = ?`, s.sessionID); err != nil {
+		return fmt.Errorf("清除旧 todos: %w", err)
+	}
+
+	for i, item := range items {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO session_todos (id, session_id, content, status, position)
+			 VALUES (?, ?, ?, ?, ?)`,
+			item.ID, s.sessionID, item.Content, string(item.Status), i); err != nil {
+			return fmt.Errorf("插入 todo: %w", err)
+		}
+	}
+	return tx.Commit()
 }

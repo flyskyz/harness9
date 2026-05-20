@@ -28,6 +28,7 @@ import (
 	"github.com/harness9/internal/env"
 	"github.com/harness9/internal/logfmt"
 	"github.com/harness9/internal/memory"
+	"github.com/harness9/internal/planning"
 	"github.com/harness9/internal/provider"
 	"github.com/harness9/internal/skills"
 	"github.com/harness9/internal/tools"
@@ -72,7 +73,7 @@ func main() {
 	}
 
 	// 构建 System Prompt（基础 prompt + AGENTS.md + skills 索引）
-	promptBuilder := harctx.NewPromptBuilder(workDir, skillsIndex)
+	promptBuilder := harctx.NewPromptBuilder(workDir, skillsIndex).WithTodoEnabled(true)
 
 	modelName := os.Getenv("LLM_MODEL")
 	if modelName == "" {
@@ -84,12 +85,14 @@ func main() {
 	}
 
 	registry := tools.NewRegistry()
+	todoStore := planning.NewTodoStore()
 	for _, tool := range []tools.BaseTool{
 		tools.NewReadFileTool(workDir),
 		tools.NewWriteFileTool(workDir),
 		tools.NewBashTool(workDir),
 		tools.NewEditFileTool(workDir),
 		skills.NewUseSkillTool(skillsIndex),
+		tools.NewTodoWriteTool(todoStore),
 	} {
 		if err := registry.Register(tool); err != nil {
 			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("注册工具 %s 失败: %v", tool.Name(), err)))
@@ -116,18 +119,21 @@ func main() {
 
 	modelLimits := provider.GetModelLimits(modelName)
 	// SummarizationCompactor 使用同一 LLM 生成摘要，内置 TokenBudgetCompactor 作为错误回退。
-	compactor := memory.NewSummarizationCompactor(llm, modelLimits.ContextTokens)
+	compactor := memory.NewSummarizationCompactor(llm, modelLimits.ContextTokens,
+		memory.WithTodoInjector(todoStore),
+	)
 
 	eng := engine.NewAgentEngine(llm, registry, workDir,
 		engine.WithPromptBuilder(promptBuilder),
 		engine.WithSession(sess),
 		engine.WithCompactor(compactor),
 		engine.WithContextWindow(modelLimits.ContextTokens),
+		engine.WithTodoStore(todoStore),
 	)
 
 	if term.IsTerminal(os.Stdin.Fd()) {
 		log.Print(logfmt.FormatMsg("main", fmt.Sprintf("harness9 TUI 启动 │ workDir=%s", workDir)))
-		if err := RunTUI(ctx, eng, mgr, sess, skillsIndex, workDir, modelName); err != nil {
+		if err := RunTUI(ctx, eng, mgr, sess, skillsIndex, todoStore, workDir, modelName); err != nil {
 			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("TUI 退出: %v", err)))
 		}
 	} else {
