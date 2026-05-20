@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/harness9/internal/planning"
 	"github.com/harness9/internal/schema"
 	"github.com/harness9/internal/tools"
 )
@@ -322,5 +323,55 @@ func TestWithPromptBuilder_FallbackDefault(t *testing.T) {
 	}
 	if !strings.Contains(systemMsg.Content, "harness9") {
 		t.Errorf("default prompt should contain 'harness9', got: %s", systemMsg.Content)
+	}
+}
+
+// TestRunLoop_PlanMode_FiltersWriteTools 验证 Plan Mode 下写操作工具被过滤，只读工具保留。
+func TestRunLoop_PlanMode_FiltersWriteTools(t *testing.T) {
+	p := &countingProvider{
+		responses: []func([]schema.ToolDefinition) *schema.Message{
+			func(tools []schema.ToolDefinition) *schema.Message {
+				return &schema.Message{Role: schema.RoleAssistant, Content: "done"}
+			},
+		},
+	}
+
+	allTools := []schema.ToolDefinition{
+		{Name: "read_file", Description: "read"},
+		{Name: "write_file", Description: "write"},
+		{Name: "bash", Description: "bash"},
+		{Name: "edit_file", Description: "edit"},
+		{Name: "todo_write", Description: "todo"},
+	}
+	reg := &staticRegistry{tools: allTools, output: "ok"}
+
+	eng := NewAgentEngine(p, reg, t.TempDir(),
+		WithMaxTurns(1),
+		WithPlanMode(planning.PlanModePlan),
+	)
+	err := eng.Run(context.Background(), "plan this")
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+
+	if len(p.calls) != 1 {
+		t.Fatalf("expected 1 LLM call, got %d", len(p.calls))
+	}
+	visibleTools := p.calls[0].tools
+	for _, tool := range visibleTools {
+		switch tool.Name {
+		case "write_file", "edit_file", "todo_write":
+			t.Errorf("tool %q should be filtered in PlanMode, but was visible", tool.Name)
+		}
+	}
+	found := make(map[string]bool)
+	for _, tool := range visibleTools {
+		found[tool.Name] = true
+	}
+	if !found["read_file"] {
+		t.Error("read_file should be visible in PlanMode")
+	}
+	if !found["bash"] {
+		t.Error("bash should be visible in PlanMode")
 	}
 }
