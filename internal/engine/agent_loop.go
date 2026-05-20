@@ -202,7 +202,9 @@ func (e *AgentEngine) runLoop(ctx context.Context, userPrompt string, logPrefix 
 	// Plan Mode：注入规划行为约束（write_file/edit_file 已由 filterReadOnlyTools 在工具层硬性过滤，
 	// 此处只补充 bash 只读限制和 todo_write 输出要求等无法在工具层表达的行为规则）。
 	if planMode == planning.PlanModePlan {
-		userPrompt = "分析以下请求，用 todo_write 输出一份结构化的逐步执行计划（每条 = 一个独立任务），然后用纯文字简述计划后停止。\n" +
+		userPrompt = "分析以下请求，用 todo_write 输出一份可直接执行的实现计划，然后用纯文字简述计划后停止。\n" +
+			"todo 项要求：每条对应一个具体的实现动作（例如：创建某文件、实现某函数、运行某命令），\n" +
+			"而非高层规划描述（禁止写\"需求澄清\"、\"方案设计\"之类无法直接执行的条目）。\n" +
 			"如需了解当前代码库，可使用 read_file 或 bash（只读命令：ls、cat、find、grep）。\n" +
 			"不要创建文件、执行 build/install 或做任何实际修改。\n\n" +
 			userPrompt

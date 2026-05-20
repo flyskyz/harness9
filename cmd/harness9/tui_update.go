@@ -22,17 +22,19 @@ import (
 
 // execPrompt 是批准计划后首次触发执行的指令。
 // 只包含行为引导，不声明权限（权限由 filterReadOnlyTools 在工具层硬性控制）。
-const execPrompt = "按照 todo 清单逐项执行：\n" +
+const execPrompt = "按照 todo 清单逐项执行。规则：\n" +
 	"1. 每开始一项前，用 todo_write 将其状态设为 in_progress\n" +
-	"2. 完成实际操作后，用 todo_write 将其状态设为 completed\n" +
-	"3. 不要输出进度摘要文字，只用 todo_write 更新状态\n" +
-	"4. 立即处理下一项，无需等待用户确认\n" +
+	"2. 用工具完成该项的实际工作——创建文件、写代码、运行命令等；" +
+	"仅更新 todo_write 状态而不调用其他工具，不算完成该项\n" +
+	"3. 确认实际产出后，用 todo_write 将其状态设为 completed\n" +
+	"4. 不要输出进度摘要文字，立即处理下一项\n" +
 	"全部完成后，用一句话汇报整体结果。"
 
 // execContinuePrompt 是自动执行模式下 EventDone 后续跑的指令。
-const execContinuePrompt = "继续处理 todo 清单中下一个 pending 或 in_progress 的任务项：" +
-	"先用 todo_write 标记为 in_progress，完成实际工作后标记为 completed，然后立即处理下一项。" +
-	"不要输出进度摘要文字，直接用工具操作。"
+const execContinuePrompt = "继续处理 todo 清单中下一个 pending 或 in_progress 的任务项。" +
+	"先用 todo_write 标记为 in_progress，然后用工具完成实际工作（写文件、执行命令等），" +
+	"确认产出后标记为 completed，再处理下一项。" +
+	"不要只更新状态而不做实际操作，不要输出进度摘要。"
 
 // builtinCmds 是 TUI 内置的斜杠命令列表（不含 /），用于 Tab 补全和提示。
 var builtinCmds = []struct {
