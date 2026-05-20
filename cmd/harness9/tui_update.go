@@ -70,32 +70,37 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 审查对话框激活时：数字键 1-4 控制模式选择，其他键忽略
 		if m.planReviewing {
 			switch msg.String() {
-			case "1":
+			case "1": // 批准并自动执行
 				m.planReviewing = false
 				m.planMode = planning.PlanModeDefault
+				m.input.Placeholder = "输入任务..."
 				if m.eng != nil {
 					m.eng.SetPlanMode(planning.PlanModeDefault)
 				}
-				m.input.Focus()
-				return m, textinput.Blink
-			case "2":
+				m.lines = append(m.lines, dimStyle.Render("  ▶ 批准计划 — 自动执行中"))
+				return m.dispatch("按照当前 todo 计划逐项执行。每开始一项先用 todo_write 将状态更新为 in_progress，完成后更新为 completed。按顺序处理所有待办项，全部完成后汇报结果。")
+			case "2": // 批准并逐步确认编辑
 				m.planReviewing = false
 				m.planMode = planning.PlanModeAutoEdit
+				m.input.Placeholder = "输入任务..."
 				if m.eng != nil {
 					m.eng.SetPlanMode(planning.PlanModeAutoEdit)
 				}
-				m.input.Focus()
-				return m, textinput.Blink
-			case "3":
+				m.lines = append(m.lines, dimStyle.Render("  ▶ 批准计划 — 逐步执行中"))
+				return m.dispatch("按照当前 todo 计划逐项执行。每开始一项先用 todo_write 将状态更新为 in_progress，完成后更新为 completed。按顺序处理所有待办项，全部完成后汇报结果。")
+			case "3": // 继续修改计划（保持 Plan Mode）
 				m.planReviewing = false
+				m.input.Placeholder = "继续描述修改意见..."
 				m.input.Focus()
 				return m, textinput.Blink
-			case "4":
+			case "4": // 取消
 				m.planReviewing = false
 				m.planMode = planning.PlanModeDefault
+				m.input.Placeholder = "输入任务..."
 				if m.eng != nil {
 					m.eng.SetPlanMode(planning.PlanModeDefault)
 				}
+				m.lines = append(m.lines, dimStyle.Render("  ✗ 已取消计划执行"))
 				m.input.Focus()
 				return m, textinput.Blink
 			}
@@ -198,29 +203,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lines = append(m.lines, skillStyle.Render("  ◎ 技能已加载: "+name))
 			}
 
-			// 开启 assistant 回复区域
-			m.lines = append(m.lines, assistantStyle.Render("◆ harness9:"), "")
-			m.pendingReplyStart = len(m.lines) - 1 // 指向末尾的空字符串
-			m.pendingReply = ""
-
-			ctx, cancel := context.WithCancel(m.outerCtx)
-			m.cancelFn = cancel
-			m.running = true
-			if m.eng == nil {
-				m.input.Focus()
-				return m, textinput.Blink
-			}
-			m.input.Blur()
-			ch, err := m.eng.RunStream(ctx, prompt)
-			if err != nil {
-				m.lines = append(m.lines, errorStyle.Render("❌ "+err.Error()))
-				m.running = false
-				cancel()
-				m.input.Focus()
-				return m, textinput.Blink
-			}
-			m.eventCh = ch
-			return m, readNextEvent(ch)
+			return m.dispatch(prompt)
 		}
 
 	case eventMsg:
@@ -572,6 +555,32 @@ func summarizeTool(name string, args json.RawMessage) string {
 		}
 		return s
 	}
+}
+
+// dispatch 以指定 prompt 启动一次 agent 推理流，需确保调用时 running == false。
+func (m tuiModel) dispatch(prompt string) (tuiModel, tea.Cmd) {
+	m.lines = append(m.lines, assistantStyle.Render("◆ harness9:"), "")
+	m.pendingReplyStart = len(m.lines) - 1
+	m.pendingReply = ""
+
+	ctx, cancel := context.WithCancel(m.outerCtx)
+	m.cancelFn = cancel
+	m.running = true
+	if m.eng == nil {
+		m.input.Focus()
+		return m, textinput.Blink
+	}
+	m.input.Blur()
+	ch, err := m.eng.RunStream(ctx, prompt)
+	if err != nil {
+		m.lines = append(m.lines, errorStyle.Render("❌ "+err.Error()))
+		m.running = false
+		cancel()
+		m.input.Focus()
+		return m, textinput.Blink
+	}
+	m.eventCh = ch
+	return m, readNextEvent(ch)
 }
 
 // handleNewSession 创建新会话，替换引擎绑定，刷新状态栏。
