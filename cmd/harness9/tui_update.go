@@ -214,6 +214,12 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 	case engine.EventToolResult:
 		result, _ := evt.Data.(schema.ToolResult)
 		elapsed := time.Since(m.toolStart).Round(time.Millisecond)
+
+		// Handle todo_write: update inline todo block
+		if m.currentTool == "todo_write" && !result.IsError && m.todoStore != nil {
+			m = m.updateTodoBlock()
+		}
+
 		var line string
 		if result.IsError {
 			line = toolErrStyle.Render(fmt.Sprintf("  ✗ %s", m.currentTool)) + dimStyle.Render(fmt.Sprintf(" — %s", elapsed))
@@ -221,7 +227,7 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 			line = toolOKStyle.Render(fmt.Sprintf("  ✓ %s", m.currentTool)) + dimStyle.Render(fmt.Sprintf(" — %s", elapsed))
 		}
 		m.lines = append(m.lines, line)
-		m.pendingReplyStart = len(m.lines) // 下一个回复文本块从这里开始
+		m.pendingReplyStart = len(m.lines)
 		m.currentTool = ""
 		m.toolArgs = nil
 		return m, readNextEvent(m.eventCh)
@@ -599,4 +605,40 @@ func (m tuiModel) handleResumeSelection(raw string) (tea.Model, tea.Cmd) {
 	))
 	m.input.Focus()
 	return m, textinput.Blink
+}
+
+// updateTodoBlock 在对话流中插入或替换 todo 任务块。
+// 首次调用时在 lines 末尾追加任务块并记录起始位置；
+// 后续调用替换 lines[todoBlockStart:todoBlockStart+todoBlockLen]。
+func (m tuiModel) updateTodoBlock() tuiModel {
+	if m.todoStore == nil {
+		return m
+	}
+	todoLines := renderTodoLines(m.todoStore.Read())
+	if len(todoLines) == 0 {
+		return m
+	}
+	if m.todoBlockStart < 0 {
+		// 首次：记录起始位置并追加
+		m.todoBlockStart = len(m.lines)
+		m.todoBlockLen = len(todoLines)
+		m.lines = append(m.lines, todoLines...)
+	} else {
+		// 替换旧 todo 块
+		end := m.todoBlockStart + m.todoBlockLen
+		if end > len(m.lines) {
+			end = len(m.lines)
+		}
+		newLines := make([]string, 0, len(m.lines)-m.todoBlockLen+len(todoLines))
+		newLines = append(newLines, m.lines[:m.todoBlockStart]...)
+		newLines = append(newLines, todoLines...)
+		newLines = append(newLines, m.lines[end:]...)
+		m.lines = newLines
+		m.todoBlockLen = len(todoLines)
+		// Adjust pendingReplyStart if it was after the todo block
+		if m.pendingReplyStart > m.todoBlockStart {
+			m.pendingReplyStart = m.todoBlockStart + len(todoLines)
+		}
+	}
+	return m
 }

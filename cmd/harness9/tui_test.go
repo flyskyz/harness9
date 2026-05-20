@@ -16,7 +16,7 @@ import (
 
 // newTestModel 返回适合单元测试的 tuiModel（nil engine/skills，固定尺寸）。
 func newTestModel() tuiModel {
-	m := newTUIModel(nil, nil, nil, nil, context.Background(), "/tmp/test", "test-model")
+	m := newTUIModel(nil, nil, nil, nil, nil, context.Background(), "/tmp/test", "test-model")
 	m.width = 80
 	m.height = 24
 	return m

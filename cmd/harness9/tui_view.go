@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/harness9/internal/memory"
+	"github.com/harness9/internal/planning"
 )
 
 // shortPath 将绝对路径中的 $HOME 替换为 "~"。
@@ -18,6 +19,34 @@ func shortPath(p string) string {
 		return p
 	}
 	return strings.Replace(p, home, "~", 1)
+}
+
+// renderTodoLines 将 TodoItem 列表渲染为带颜色的终端文本行。
+func renderTodoLines(items []planning.TodoItem) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(items)+1)
+	lines = append(lines, dimStyle.Render("  ┄ Tasks ┄"))
+	for _, item := range items {
+		var icon, content string
+		switch item.Status {
+		case planning.TodoInProgress:
+			icon = toolRunStyle.Render("[>]")
+			content = toolRunStyle.Render(item.Content)
+		case planning.TodoCompleted:
+			icon = toolOKStyle.Render("[✓]")
+			content = dimStyle.Render(item.Content)
+		case planning.TodoCancelled:
+			icon = dimStyle.Render("[~]")
+			content = dimStyle.Render(item.Content)
+		default: // pending
+			icon = dimStyle.Render("[ ]")
+			content = item.Content
+		}
+		lines = append(lines, "  │ "+icon+" "+content)
+	}
+	return lines
 }
 
 // renderConversation 渲染对话历史区（Scrollback）。
@@ -99,9 +128,27 @@ func (m tuiModel) renderStatusBar() string {
 			sessionInfo += dimStyle.Render("  ctx: ") + tokenStr
 		}
 	}
+	modeLabel := m.planMode.Label()
+	var modePart string
+	if modeLabel != "" {
+		planStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Bold(true)
+		modePart = dimStyle.Render("  │  ") + planStyle.Render(modeLabel)
+	}
+
+	var tasksPart string
+	if m.todoStore != nil {
+		active, total := m.todoStore.ActiveCount()
+		if total > 0 {
+			completed := total - active
+			tasksPart = dimStyle.Render("  │  ") + cyanStyle.Render(fmt.Sprintf("%d/%d tasks", completed, total))
+		}
+	}
+
 	content := dimStyle.Render("  model: ") +
 		cyanStyle.Render(m.modelName) +
-		dimStyle.Render("  │  mode: Default  │  ") +
+		modePart +
+		tasksPart +
+		dimStyle.Render("  │  ") +
 		cyanStyle.Render(shortPath(m.workDir)) +
 		sessionInfo
 	return statusBarStyle.Width(m.width).Render(content)

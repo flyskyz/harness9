@@ -14,6 +14,7 @@ import (
 
 	"github.com/harness9/internal/engine"
 	"github.com/harness9/internal/memory"
+	"github.com/harness9/internal/planning"
 	"github.com/harness9/internal/skills"
 )
 
@@ -130,10 +131,18 @@ type tuiModel struct {
 	// /resume 选择模式
 	resumeSelecting bool
 	resumeSessions  []memory.SessionInfo
+
+	// Todo 跟踪
+	todoStore      *planning.TodoStore
+	todoBlockStart int // todo 块在 lines 中的起始索引，-1 表示尚未渲染
+	todoBlockLen   int // todo 块当前占用的行数
+
+	// Plan Mode 状态
+	planMode planning.PlanMode
 }
 
 // newTUIModel 构造已初始化的 tuiModel：输入框聚焦，spinner 使用 Dot 样式。
-func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, mgr *memory.Manager, sess memory.Session, outerCtx context.Context, workDir, modelName string) tuiModel {
+func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, mgr *memory.Manager, sess memory.Session, todoStore *planning.TodoStore, outerCtx context.Context, workDir, modelName string) tuiModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
@@ -144,17 +153,20 @@ func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, mgr *memory.Manager
 	ti.Focus()
 
 	m := tuiModel{
-		workDir:     workDir,
-		modelName:   modelName,
-		spinner:     sp,
-		input:       ti,
-		outerCtx:    outerCtx,
-		eng:         eng,
-		skillsIndex: idx,
-		viewTop:     -1, // -1 = 自动跟随底部
-		phase:       phaseWelcome,
-		manager:     mgr,
-		session:     sess,
+		workDir:        workDir,
+		modelName:      modelName,
+		spinner:        sp,
+		input:          ti,
+		outerCtx:       outerCtx,
+		eng:            eng,
+		skillsIndex:    idx,
+		viewTop:        -1, // -1 = 自动跟随底部
+		phase:          phaseWelcome,
+		manager:        mgr,
+		session:        sess,
+		todoStore:      todoStore,
+		todoBlockStart: -1,
+		planMode:       planning.PlanModeDefault,
 	}
 	if sess != nil {
 		m.sessionID = sess.SessionID()
@@ -169,13 +181,13 @@ func (m tuiModel) Init() tea.Cmd {
 
 // RunTUI 以 AltScreen 模式启动 Bubbletea 程序。
 // 用户按 Ctrl-C/Ctrl-D（空闲时）退出后返回。
-func RunTUI(ctx context.Context, eng *engine.AgentEngine, mgr *memory.Manager, sess memory.Session, idx *skills.Index, workDir, modelName string) error {
+func RunTUI(ctx context.Context, eng *engine.AgentEngine, mgr *memory.Manager, sess memory.Session, idx *skills.Index, todoStore *planning.TodoStore, workDir, modelName string) error {
 	// TUI 独占终端，将内部日志重定向到静默，避免污染 AltScreen 输出。
 	// 退出后恢复原 Writer，避免影响同进程其他逻辑（如测试框架）。
 	origWriter := log.Writer()
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(origWriter)
-	m := newTUIModel(eng, idx, mgr, sess, ctx, workDir, modelName)
+	m := newTUIModel(eng, idx, mgr, sess, todoStore, ctx, workDir, modelName)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
