@@ -21,21 +21,18 @@ import (
 )
 
 // execPrompt 是批准计划后首次触发执行的指令。
-// 明确声明 Plan Mode 已结束、全工具可用，禁止 LLM 用文字汇报进度（应改用 todo_write）。
-const execPrompt = "[执行模式已启动 — Plan Mode 已结束，你现在拥有完整工具权限]\n\n" +
-	"你可以自由使用所有工具：bash、write_file、edit_file、read_file 等。\n\n" +
-	"按照 todo 清单逐项执行，规则：\n" +
+// 只包含行为引导，不声明权限（权限由 filterReadOnlyTools 在工具层硬性控制）。
+const execPrompt = "按照 todo 清单逐项执行：\n" +
 	"1. 每开始一项前，用 todo_write 将其状态设为 in_progress\n" +
-	"2. 完成实际操作（创建文件、执行命令等）后，用 todo_write 将其状态设为 completed\n" +
-	"3. 不要用文字汇报进度（禁止输出进度摘要文字），只用 todo_write 更新状态\n" +
+	"2. 完成实际操作后，用 todo_write 将其状态设为 completed\n" +
+	"3. 不要输出进度摘要文字，只用 todo_write 更新状态\n" +
 	"4. 立即处理下一项，无需等待用户确认\n" +
 	"全部完成后，用一句话汇报整体结果。"
 
 // execContinuePrompt 是自动执行模式下 EventDone 后续跑的指令。
-const execContinuePrompt = "[执行模式 — 继续执行下一个 todo 项]\n\n" +
-	"Plan Mode 已结束，你有完整工具权限。继续处理 todo 清单中下一个 pending 或 in_progress 的任务项：\n" +
-	"先用 todo_write 标记为 in_progress，完成实际工作后标记为 completed，然后立即处理下一项。\n" +
-	"不要输出进度文字摘要，直接用工具操作。"
+const execContinuePrompt = "继续处理 todo 清单中下一个 pending 或 in_progress 的任务项：" +
+	"先用 todo_write 标记为 in_progress，完成实际工作后标记为 completed，然后立即处理下一项。" +
+	"不要输出进度摘要文字，直接用工具操作。"
 
 // builtinCmds 是 TUI 内置的斜杠命令列表（不含 /），用于 Tab 补全和提示。
 var builtinCmds = []struct {
