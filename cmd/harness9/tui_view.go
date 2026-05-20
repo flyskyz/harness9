@@ -38,30 +38,58 @@ func shortPath(p string) string {
 	return strings.Replace(p, home, "~", 1)
 }
 
-// renderTodoLines 将 TodoItem 列表渲染为带颜色的终端文本行。
-func renderTodoLines(items []planning.TodoItem) []string {
+// renderTodoLines 将 TodoItem 列表渲染为结构化 todo 列表。
+// 格式：标题行（进度统计）+ 分隔线 + 每项状态图标与内容。
+func (m tuiModel) renderTodoLines(items []planning.TodoItem) []string {
 	if len(items) == 0 {
 		return nil
 	}
-	lines := make([]string, 0, len(items)+1)
-	lines = append(lines, dimStyle.Render("  ┄ Tasks ┄"))
+
+	accent := m.accentStyle()
+
+	// 统计完成数与进行中数
+	var done, active int
 	for _, item := range items {
+		switch item.Status {
+		case planning.TodoCompleted:
+			done++
+		case planning.TodoInProgress:
+			active++
+		}
+	}
+
+	lines := make([]string, 0, len(items)+3)
+
+	// 标题行：图标 + "Tasks" + 进度 + 活跃数
+	progress := accent.Render(fmt.Sprintf("%d/%d", done, len(items)))
+	title := "  " + accent.Render("☰") + "  " +
+		lipgloss.NewStyle().Bold(true).Render("Tasks") +
+		dimStyle.Render("  ·  ") + progress
+	if active > 0 {
+		title += dimStyle.Render("  ·  ") + toolRunStyle.Render(fmt.Sprintf("%d active", active))
+	}
+	lines = append(lines, title)
+	lines = append(lines, dimStyle.Render("  ──────────────────────────────────────"))
+
+	// 各任务项
+	for i, item := range items {
+		num := dimStyle.Render(fmt.Sprintf("%2d.", i+1))
 		var icon, content string
 		switch item.Status {
 		case planning.TodoInProgress:
-			icon = toolRunStyle.Render("[>]")
+			icon = toolRunStyle.Render("▶")
 			content = toolRunStyle.Render(item.Content)
 		case planning.TodoCompleted:
-			icon = toolOKStyle.Render("[✓]")
+			icon = toolOKStyle.Render("✔")
 			content = dimStyle.Render(item.Content)
 		case planning.TodoCancelled:
-			icon = dimStyle.Render("[~]")
+			icon = dimStyle.Render("⊘")
 			content = dimStyle.Render(item.Content)
 		default: // pending
-			icon = dimStyle.Render("[ ]")
+			icon = dimStyle.Render("○")
 			content = item.Content
 		}
-		lines = append(lines, "  │ "+icon+" "+content)
+		lines = append(lines, "  "+num+"  "+icon+"  "+content)
 	}
 	return lines
 }

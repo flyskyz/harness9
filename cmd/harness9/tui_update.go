@@ -685,7 +685,7 @@ func (m tuiModel) updateTodoBlock() tuiModel {
 	if m.todoStore == nil {
 		return m
 	}
-	todoLines := renderTodoLines(m.todoStore.Read())
+	todoLines := m.renderTodoLines(m.todoStore.Read())
 	if len(todoLines) == 0 {
 		return m
 	}
