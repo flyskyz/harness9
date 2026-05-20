@@ -20,6 +20,23 @@ import (
 	"github.com/harness9/internal/schema"
 )
 
+// execPrompt 是批准计划后首次触发执行的指令。
+// 明确声明 Plan Mode 已结束、全工具可用，禁止 LLM 用文字汇报进度（应改用 todo_write）。
+const execPrompt = "[执行模式已启动 — Plan Mode 已结束，你现在拥有完整工具权限]\n\n" +
+	"你可以自由使用所有工具：bash、write_file、edit_file、read_file 等。\n\n" +
+	"按照 todo 清单逐项执行，规则：\n" +
+	"1. 每开始一项前，用 todo_write 将其状态设为 in_progress\n" +
+	"2. 完成实际操作（创建文件、执行命令等）后，用 todo_write 将其状态设为 completed\n" +
+	"3. 不要用文字汇报进度（禁止输出进度摘要文字），只用 todo_write 更新状态\n" +
+	"4. 立即处理下一项，无需等待用户确认\n" +
+	"全部完成后，用一句话汇报整体结果。"
+
+// execContinuePrompt 是自动执行模式下 EventDone 后续跑的指令。
+const execContinuePrompt = "[执行模式 — 继续执行下一个 todo 项]\n\n" +
+	"Plan Mode 已结束，你有完整工具权限。继续处理 todo 清单中下一个 pending 或 in_progress 的任务项：\n" +
+	"先用 todo_write 标记为 in_progress，完成实际工作后标记为 completed，然后立即处理下一项。\n" +
+	"不要输出进度文字摘要，直接用工具操作。"
+
 // builtinCmds 是 TUI 内置的斜杠命令列表（不含 /），用于 Tab 补全和提示。
 var builtinCmds = []struct {
 	name string
@@ -81,7 +98,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.eng.SetPlanMode(planning.PlanModeDefault)
 				}
 				m.lines = append(m.lines, dimStyle.Render("  ▶ 批准计划 — 自动执行中"))
-				return m.dispatch("按照当前 todo 计划逐项执行。每开始一项先用 todo_write 将状态更新为 in_progress，完成后更新为 completed。按顺序处理所有待办项，全部完成后汇报结果。")
+				return m.dispatch(execPrompt)
 			case "2": // 批准并逐步确认编辑
 				m.planReviewing = false
 				m.planMode = planning.PlanModeAutoEdit
@@ -93,7 +110,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.eng.SetPlanMode(planning.PlanModeAutoEdit)
 				}
 				m.lines = append(m.lines, dimStyle.Render("  ▶ 批准计划 — 逐步执行中"))
-				return m.dispatch("按照当前 todo 计划逐项执行。每开始一项先用 todo_write 将状态更新为 in_progress，完成后更新为 completed。按顺序处理所有待办项，全部完成后汇报结果。")
+				return m.dispatch(execPrompt)
 			case "3": // 继续修改计划（保持 Plan Mode）
 				m.planReviewing = false
 				m.input.Placeholder = "继续描述修改意见..."
@@ -318,7 +335,7 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 				}
 				if m.autoExecStuck < 3 {
 					m.autoExecPrevDone = done
-					return m.dispatch("继续按 todo 计划执行下一个待办项。先用 todo_write 将该项状态更新为 in_progress，完成实际工作后更新为 completed，然后继续处理下一项，直到全部完成。")
+					return m.dispatch(execContinuePrompt)
 				}
 				// 连续 3 次无进度，放弃自动执行
 				m.autoExecuting = false
