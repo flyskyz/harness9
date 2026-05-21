@@ -66,24 +66,30 @@ func WithCompactor(c memory.Compactor) Option {
 }
 
 // WithPlanMode 设置 Agent 的初始执行模式。
+// runLoop 在启动时会快照此值，循环内不会受后续 SetPlanMode 调用影响。
 func WithPlanMode(mode planning.PlanMode) Option {
 	return func(e *AgentEngine) { e.planMode = mode }
 }
 
-// WithTodoStore 绑定 TodoStore，使引擎在 runLoop 生命周期中加载/保存任务列表。
+// WithTodoStore 绑定 TodoStore，使引擎在 runLoop 生命周期中自动执行以下操作：
+//   - 启动时：从 Session 恢复 TodoStore 状态（跨会话续接未完成任务）
+//   - 结束时：通过 defer 将 TodoStore 保存到 Session（所有路径均执行）
 func WithTodoStore(s *planning.TodoStore) Option {
 	return func(e *AgentEngine) { e.todoStore = s }
 }
 
 // SetSession 替换当前绑定的 Session，供 TUI /new、/resume 命令切换会话时调用。
-// 线程安全：可从任意 goroutine 调用（如 TUI goroutine）。
+// 线程安全：可从任意 goroutine 调用（如 TUI goroutine），内部以写锁保护。
+// 注意：修改对当前正在运行的 runLoop 无影响（runLoop 在入口快照 session 值）。
 func (e *AgentEngine) SetSession(s memory.Session) {
 	e.mu.Lock()
 	e.session = s
 	e.mu.Unlock()
 }
 
-// SetPlanMode 线程安全地更新当前执行模式。TUI Shift+Tab 调用此方法。
+// SetPlanMode 线程安全地更新当前执行模式。TUI Shift+Tab 键调用此方法。
+// 注意：修改对当前正在运行的 runLoop 无影响（runLoop 在入口快照 planMode 值），
+// 仅在下一次 Run/RunStream 调用时生效。
 func (e *AgentEngine) SetPlanMode(mode planning.PlanMode) {
 	e.mu.Lock()
 	e.planMode = mode
@@ -309,23 +315,23 @@ func (e *AgentEngine) buildSystemPrompt() string {
 	if e.promptBuilder != nil {
 		return e.promptBuilder.Build()
 	}
-	return fmt.Sprintf(`Your name is harness9. Always refer to yourself as "harness9" — never as "AI assistant", "language model", or any other generic term.
+	return fmt.Sprintf(`你的名字是 harness9。请始终以 "harness9" 自称 — 不要使用 "AI 助手"、"语言模型" 或任何其他通称。
 
-harness9 is a general-purpose AI agent with full access to the user's computer.
+harness9 是一个通用 AI Agent，可完全访问用户的计算机。
 
-Capabilities:
-- Run shell commands to execute programs, manage processes, install packages, and interact with the OS
-- Read, write, and edit files across the filesystem
-- Chain multiple tools together to complete complex, multi-step tasks autonomously
+能力：
+- 执行 Shell 命令：运行程序、管理进程、安装软件包、与操作系统交互
+- 读取、写入和编辑文件系统中的文件
+- 将多个工具串联使用，自主完成复杂的多步骤任务
 
-Working directory: %s
+工作目录：%s
 
-Guidelines:
-- Investigate before acting: read files and run diagnostic commands first
-- Work in small verifiable steps; check results after each significant action
-- When a command fails, diagnose the root cause rather than guessing
-- Prefer targeted edits over full rewrites; preserve existing style and conventions
-- If a task is ambiguous, choose the most reasonable interpretation and proceed`, e.workDir)
+工作准则：
+- 先调查后行动：优先读取文件并运行诊断命令
+- 小步可验证地推进：每次重要操作后检查结果
+- 命令失败时，诊断根本原因而非猜测
+- 优先局部修改而非整体重写；保持现有风格和约定
+- 任务描述模糊时，选择最合理的解释后直接推进`, e.workDir)
 }
 
 // loadHistoryWith 从 sess 加载历史消息，注入 system prompt 和当前用户输入。
@@ -370,8 +376,13 @@ func (e *AgentEngine) saveHistoryWith(ctx context.Context, sess memory.Session, 
 	}
 }
 
-// planModeWhitelist 是 Plan Mode 下允许 LLM 调用的工具名称集合。
-// 包含 todo_write：Plan Mode 的核心目标是让 LLM 通过 todo_write 输出结构化计划。
+// planModeWhitelist 是 Plan Mode 下允许 LLM 调用的工具名称白名单（read-only map，安全并发读）。
+//
+// 白名单的设计意图：
+//   - read_file / bash：允许探索代码库，但 prompt 层约束 bash 只使用只读命令（ls/cat/find/grep）
+//   - todo_write：Plan Mode 的核心产出——LLM 通过此工具输出结构化实现计划
+//   - use_skill：允许加载 Skills 获取项目规范文档
+//   - write_file / edit_file：不在白名单，从工具列表中硬性移除（工具层硬约束，优于 prompt 层软约束）
 var planModeWhitelist = map[string]bool{
 	"read_file":  true,
 	"bash":       true,
@@ -379,7 +390,9 @@ var planModeWhitelist = map[string]bool{
 	"todo_write": true,
 }
 
-// filterReadOnlyTools 返回 tools 中属于 planModeWhitelist 的子集。
+// filterReadOnlyTools 从工具定义列表中过滤出 planModeWhitelist 中的子集，
+// 在 Plan Mode 下替代完整工具列表传递给 LLM。
+// 使用工具层硬约束而非 prompt 层软约束，确保 LLM 无论在何种上下文状态下都无法访问被过滤的工具。
 func filterReadOnlyTools(tools []schema.ToolDefinition) []schema.ToolDefinition {
 	var result []schema.ToolDefinition
 	for _, t := range tools {

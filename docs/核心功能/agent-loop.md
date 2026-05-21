@@ -222,27 +222,28 @@ Turn 2:
 引擎启动时，通过 `loadHistoryWith` 构造初始对话上下文。若注入了 `Session`，历史消息从持久化存储中恢复；否则仅含 system 提示和当前用户输入：
 
 ```go
-// loadHistoryWith 从 Session 恢复历史消息，并追加 system + user 到初始上下文。
-// startLen 标记历史消息边界，用于 saveHistoryWith 时仅保存新增消息。
+// loadHistoryWith 从 Session 恢复历史消息，注入 system prompt，追加用户输入。
+// startLen 标记新消息起始位置（已有历史 + system 不持久化），
+// 用于 saveHistoryWith 时仅保存 msgs[startLen:]。
 func (e *AgentEngine) loadHistoryWith(ctx context.Context, userPrompt string, sess memory.Session) ([]schema.Message, int) {
     var history []schema.Message
     if sess != nil {
-        history, _ = sess.GetWithLimit(ctx, 500)
+        msgs, err := sess.GetMessages(ctx, 0) // 0 = 返回全部历史
+        if err == nil {
+            history = msgs
+        }
     }
-    // system prompt 注入在历史之后，不计入 startLen
-    contextHistory := append(history, schema.Message{
-        Role:    schema.RoleSystem,
-        Content: e.buildSystemPrompt(),
-    })
-    startLen := len(contextHistory) // 历史 + system 不持久化
-    contextHistory = append(contextHistory, schema.Message{
-        Role: schema.RoleUser, Content: userPrompt,
-    })
-    return contextHistory, startLen
+    // system prompt 注入在历史消息开头（若尚不存在），每次调用重建，不持久化到 DB。
+    if len(history) == 0 || history[0].Role != schema.RoleSystem {
+        history = append([]schema.Message{{Role: schema.RoleSystem, Content: e.buildSystemPrompt()}}, history...)
+    }
+    startLen := len(history) // 新消息从此处开始；system prompt 不计入持久化范围
+    history = append(history, schema.Message{Role: schema.RoleUser, Content: userPrompt})
+    return history, startLen
 }
 ```
 
-**WorkDir 会被注入到 system prompt** 中，使 LLM 了解其工作目录。system prompt 本身不持久化（每次启动重建），`startLen` 标记新消息的起始位置，用于 `saveHistoryWith` 时仅保存 `msgs[startLen:]`。
+**WorkDir 会被注入到 system prompt** 中，使 LLM 了解其工作目录。system prompt 本身不持久化（每次启动时重建并前插到历史消息开头，避免重复插入），`startLen` 标记新消息的起始位置，用于 `saveHistoryWith` 时仅保存 `msgs[startLen:]`。
 
 ### 4.2 LLM 调用阶段
 
@@ -394,11 +395,11 @@ func sendEvent(ctx context.Context, ch chan<- Event, evt Event) bool {
 
 ```go
 type LLMProvider interface {
-    // 阻塞式调用：返回完整响应 Message
+    // 阻塞式调用：返回完整响应 Message 和实际 token 用量（Usage 可能为 nil）
     Generate(ctx context.Context, messages []schema.Message,
-             availableTools []schema.ToolDefinition) (*schema.Message, error)
+             availableTools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error)
 
-    // 流式调用：通过 channel 逐 chunk 返回增量
+    // 流式调用：通过 channel 逐 chunk 返回增量；最后一个有效 chunk 类型为 StreamChunkDone
     GenerateStream(ctx context.Context, messages []schema.Message,
                    availableTools []schema.ToolDefinition) (<-chan schema.StreamChunk, error)
 }
@@ -503,6 +504,7 @@ env.Load(filepath.Join(workDir, ".env"))
 
 ```go
 type Registry interface {
+    Register(tool BaseTool) error
     GetAvailableTools() []schema.ToolDefinition
     Execute(ctx context.Context, call schema.ToolCall) schema.ToolResult
 }
@@ -527,8 +529,12 @@ eng := engine.NewAgentEngine(p, r, workDir,
 | `WithMaxConcurrentTools(n)` | `int` | 0 | 同一 Turn 内最大并发工具数，0 = 不限制 |
 | `WithSession(s)` | `memory.Session` | nil | 注入会话存储，启用历史消息持久化 |
 | `WithCompactor(c)` | `memory.Compactor` | nil | 注入上下文压缩器，控制上下文窗口大小 |
+| `WithContextWindow(n)` | `int` | 0 | 模型 context window（tokens），用于 TUI token 使用率展示 |
+| `WithPromptBuilder(pb)` | `PromptBuilder` | nil | 自定义 system prompt 构建器，nil 时使用内置默认文案 |
+| `WithPlanMode(mode)` | `planning.PlanMode` | Default | 初始执行模式；可运行时通过 `SetPlanMode` 更新 |
+| `WithTodoStore(s)` | `*planning.TodoStore` | nil | 绑定任务列表，启用跨会话 todo 持久化 |
 
-运行时可通过 `eng.SetSession(sess)` 切换会话（并发安全，内部使用 `sync.RWMutex`）。
+运行时可通过 `eng.SetSession(sess)` 切换会话，`eng.SetPlanMode(mode)` 切换执行模式（均并发安全，内部使用 `sync.RWMutex`，但对当前正在运行的 `runLoop` 无影响）。
 
 **双模式调用：**
 
@@ -651,10 +657,11 @@ Turn 2:
 
 | 限制 | 当前状态 | 演进方向 |
 |------|---------|---------|
-| **上下文窗口控制** | 已实现 `SlidingWindowCompactor`（消息数滑动窗口） | Token Budget 精算（P2）；LLM 语义摘要（P3） |
-| **会话历史持久化** | 已实现 SQLiteSession（WAL 模式，`~/.harness9/sessions.db`） | 多工作目录隔离；会话标签与搜索 |
-| **流式输出** | 已实现 `RunStream` + `GenerateStream`，支持逐 token delta | 扩展 SSE HTTP 端点，对接外部实时推送渠道 |
-| **权限控制** | 无 | 工具执行前统一 PermissionChecker，支持交互式确认 |
+| **上下文窗口控制** | 已实现 `SummarizationCompactor`（默认，LLM 摘要 + 增量更新）、`TokenBudgetCompactor`（回退）、`SlidingWindowCompactor`（消息数窗口） | 进一步优化摘要质量；支持自定义摘要模板 |
+| **会话历史持久化** | 已实现 SQLiteSession（WAL 模式，`~/.harness9/sessions.db`）+ TodoStore 跨会话持久化 | 多工作目录隔离；会话标签与搜索（FTS5） |
+| **流式输出** | 已实现 `RunStream` + `GenerateStream`，支持逐 token delta + EventTokenUpdate/EventCompaction | 扩展 SSE HTTP 端点，对接外部实时推送渠道 |
+| **Planning** | 已实现 Plan Mode + TodoStore + 自动续跑 + 停滞检测 | PlanModeAutoEdit 逐步确认编辑模式 |
+| **权限控制** | Plan Mode 提供工具层只读约束 | 工具执行前统一 PermissionChecker，支持交互式确认 |
 | **Hook 系统** | 无 | PreToolUse / PostToolUse / Stop / TurnComplete 事件钩子 |
 | **多 Agent 编排** | 单 Agent 模式 | 子 Agent 调度、并行 Agent、专用角色 Agent |
 

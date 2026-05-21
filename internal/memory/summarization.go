@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/harness9/internal/schema"
 )
@@ -173,7 +174,13 @@ func (c *SummarizationCompactor) summarize(head []schema.Message) (string, error
 	sysMsg := schema.Message{Role: schema.RoleSystem, Content: summarySystemPrompt}
 	userMsg := schema.Message{Role: schema.RoleUser, Content: userContent}
 
-	resp, _, err := c.Provider.Generate(context.Background(), []schema.Message{sysMsg, userMsg}, nil)
+	// 为摘要 LLM 调用设置独立超时（60 秒）。
+	// Compact 接口不传递外层 context，因此此处无法感知外层取消；
+	// 超时可防止摘要请求无限阻塞，确保 runLoop 在网络异常时能够回退到 Fallback 压缩器。
+	summaryCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	resp, _, err := c.Provider.Generate(summaryCtx, []schema.Message{sysMsg, userMsg}, nil)
 	if err != nil {
 		return "", err
 	}

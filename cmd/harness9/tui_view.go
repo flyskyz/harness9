@@ -12,8 +12,12 @@ import (
 	"github.com/harness9/internal/planning"
 )
 
-// accentStyle 返回当前模式下的 accent 样式：
-// Default → 青色（cyanStyle），Plan/AutoEdit → 琥珀黄（planAccentStyle）。
+// accentStyle 返回当前执行模式对应的强调色样式（accent style）：
+//   - PlanModeDefault → 青色（cyanStyle #81）
+//   - PlanModePlan / PlanModeAutoEdit → 琥珀黄（planAccentStyle #220）
+//
+// 此方法被 renderStatusBar、renderFooter、renderTodoLines 统一调用，
+// 确保颜色切换逻辑集中在单一位置，View 层无散落的 `if planMode ==` 判断。
 func (m tuiModel) accentStyle() lipgloss.Style {
 	if m.planMode != planning.PlanModeDefault {
 		return planAccentStyle
@@ -21,7 +25,9 @@ func (m tuiModel) accentStyle() lipgloss.Style {
 	return cyanStyle
 }
 
-// activeStatusBarStyle 返回当前模式下的状态栏样式。
+// activeStatusBarStyle 返回当前模式下的状态栏背景样式：
+//   - Default → 深灰底（statusBarStyle #235）
+//   - Plan/AutoEdit → 深橙底（planStatusBarStyle #94），给用户明确的视觉信号
 func (m tuiModel) activeStatusBarStyle() lipgloss.Style {
 	if m.planMode != planning.PlanModeDefault {
 		return planStatusBarStyle
@@ -38,8 +44,18 @@ func shortPath(p string) string {
 	return strings.Replace(p, home, "~", 1)
 }
 
-// renderTodoLines 将 TodoItem 列表渲染为结构化 todo 列表。
-// 格式：标题行（进度统计）+ 分隔线 + 每项状态图标与内容。
+// renderTodoLines 将 TodoItem 列表渲染为结构化多行文本，追加到 Scrollback（m.lines）。
+//
+// 输出格式：标题行（图标 + "Tasks" + 进度统计 + 活跃任务数）+ 分隔线 + 各任务行。
+// 每个任务行包含：序号、状态图标（✔/▶/○/⊘）和内容文本。
+//
+// 状态图标映射：
+//   - in_progress → ▶（黄色，工具运行色）
+//   - completed   → ✔（绿色）
+//   - cancelled   → ⊘（灰色）
+//   - pending     → ○（灰色）
+//
+// 颜色跟随当前 planMode 的 accentStyle（Plan Mode 下为琥珀色，其他为青色）。
 func (m tuiModel) renderTodoLines(items []planning.TodoItem) []string {
 	if len(items) == 0 {
 		return nil
@@ -205,15 +221,34 @@ func (m tuiModel) renderStatusBar() string {
 	return m.activeStatusBarStyle().Width(m.width).Render(content)
 }
 
-// renderPlanReviewDialog 渲染 Plan Mode 完成后的审查选择对话框。
+// renderPlanReviewDialog 渲染 Plan Mode 完成后的审查选择对话框（带圆角边框）。
+// 对话框在 planReviewing == true 时由 View() 插入到 StatusBar 之前，
+// ↑↓ 移动光标，Enter 确认，Esc 取消。
 func (m tuiModel) renderPlanReviewDialog() string {
-	content := planModeLabelStyle.Render("Plan Mode 完成 — 选择下一步操作") + "\n\n" +
-		planAccentStyle.Render("[1]") + "  批准并自动执行\n" +
-		planAccentStyle.Render("[2]") + "  批准并逐步确认编辑\n" +
-		planAccentStyle.Render("[3]") + "  继续修改计划（保持 Plan Mode）\n" +
-		planAccentStyle.Render("[4]") + "  取消"
+	options := []string{
+		"批准并自动执行",
+		"批准并逐步确认编辑",
+		"继续修改计划（保持 Plan Mode）",
+		"取消",
+	}
 
-	return planReviewBoxStyle.Render(content)
+	var sb strings.Builder
+	sb.WriteString(planModeLabelStyle.Render("Plan Mode 完成 — 选择下一步操作"))
+	sb.WriteString("\n\n")
+	for i, opt := range options {
+		if i == m.planReviewCursor {
+			sb.WriteString(planAccentStyle.Render("▶ ") + planReviewSelectedStyle.Render(opt))
+		} else {
+			sb.WriteString("  " + dimStyle.Render(opt))
+		}
+		if i < len(options)-1 {
+			sb.WriteByte('\n')
+		}
+	}
+	sb.WriteString("\n\n")
+	sb.WriteString(dimStyle.Render("↑↓ 移动  Enter 确认  Esc 取消"))
+
+	return planReviewBoxStyle.Render(sb.String())
 }
 
 // renderInput 渲染输入行。Plan Mode 下用琥珀色高亮 › 提示符。

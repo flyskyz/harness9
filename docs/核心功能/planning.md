@@ -136,7 +136,11 @@ func (s *TodoStore) Read() []TodoItem {
 }
 ```
 
-`Write` 先分配新切片再 `copy`，而不是直接赋值 `s.items = items`，防止调用方持有对内部 slice 的引用从而绕过锁。
+`Write` 采用双重 copy 策略：
+- 第一次 copy（`s.items = make(...)` + `copy`）：内部存储与入参 `items` 解耦，防止调用方后续修改 `items` 影响 `TodoStore` 内部状态。
+- 第二次 copy（`s.copy()`）：返回值与内部存储解耦，防止调用方修改返回值影响 `TodoStore`。
+
+相比直接赋值 `s.items = items`，双重 copy 确保调用方、内部存储与入参三者完全独立，消除潜在的数据竞争风险。
 
 ### TodoItem 状态机
 
@@ -467,10 +471,11 @@ var completed int
 for _, item := range items {
     if item.Status == planning.TodoCompleted { completed++ }
 }
-tasksPart = cyanStyle.Render(fmt.Sprintf("%d/%d tasks", completed, len(items)))
+// accent 颜色跟随当前 planMode：Default 为青色，Plan/AutoEdit 为琥珀黄
+tasksPart = dimStyle.Render("  │  ") + accent.Render(fmt.Sprintf("%d/%d tasks", completed, len(items)))
 ```
 
-只统计 `TodoCompleted` 状态的条目作为"已完成"，`in_progress` 不计入。状态栏显示类似 `3/11 tasks`，实时反映真实完成进度。
+只统计 `TodoCompleted` 状态的条目作为"已完成"，`in_progress` 不计入。状态栏显示类似 `3/11 tasks`，实时反映真实完成进度。颜色跟随当前 `planMode` 的 `accentStyle()`（Plan Mode 下为琥珀黄，默认模式下为青色）。
 
 ---
 

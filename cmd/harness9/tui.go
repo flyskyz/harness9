@@ -62,6 +62,7 @@ var (
 				BorderForeground(lipgloss.Color("208")).
 				Padding(0, 2).
 				Width(50)
+	planReviewSelectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
 
 	// token 使用率颜色（绿/黄/红，按使用量变化）
 	tokenOKStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // < 50%: 绿
@@ -145,17 +146,27 @@ type tuiModel struct {
 	resumeSelecting bool
 	resumeSessions  []memory.SessionInfo
 
-	// Todo 跟踪
+	// Todo 跟踪：与 engine 共享同一个 *planning.TodoStore 实例。
+	// 每次 todo_write 工具完成后，TUI 从 todoStore 读取最新快照并渲染到对话流中。
 	todoStore *planning.TodoStore
 
-	// Plan Mode 状态
-	planMode      planning.PlanMode
-	planReviewing bool // Plan Mode 完成后展示审查对话框
+	// Plan Mode 状态：控制工具过滤、状态栏色调和审查对话框显示。
+	planMode planning.PlanMode
+	// planReviewing 在 Plan Mode 的 EventDone 时设为 true，
+	// 此后 View() 渲染审查对话框，屏蔽普通输入，等待用户用 ↑↓ 选择后按 Enter 确认。
+	planReviewing bool
+	// planReviewCursor 是审查对话框的当前光标位置（0-3 对应 4 个选项）。
+	planReviewCursor int
 
-	// 自动执行状态（选项 1/2 批准后激活）
-	autoExecuting    bool // true = EventDone 时若有剩余 todo 自动续跑
-	autoExecPrevDone int  // 上次 dispatch 启动时已完成的 todo 数，用于检测进度停滞
-	autoExecStuck    int  // 连续无进度的 dispatch 次数，达到 3 次后放弃
+	// 自动执行（autoExecuting）：选项 1/2 批准计划后激活。
+	// EventDone 时检查是否有剩余 todo，有则自动 dispatch(execContinuePrompt) 续跑。
+	autoExecuting bool
+	// autoExecPrevDone 记录上次 dispatch 时已完成的 todo 数量，
+	// 用于判断本次 EventDone 是否有实际进度（completed 数是否增加）。
+	autoExecPrevDone int
+	// autoExecStuck 记录连续无进度的 dispatch 次数。
+	// 达到 3 次后判定为停滞（LLM 空转），停止自动执行并提示用户手动介入。
+	autoExecStuck int
 }
 
 // newTUIModel 构造已初始化的 tuiModel：输入框聚焦，spinner 使用 Dot 样式。

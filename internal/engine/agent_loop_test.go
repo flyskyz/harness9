@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/harness9/internal/planning"
+	"github.com/harness9/internal/provider"
 	"github.com/harness9/internal/schema"
 	"github.com/harness9/internal/tools"
 )
@@ -324,6 +325,138 @@ func TestWithPromptBuilder_FallbackDefault(t *testing.T) {
 	if !strings.Contains(systemMsg.Content, "harness9") {
 		t.Errorf("default prompt should contain 'harness9', got: %s", systemMsg.Content)
 	}
+}
+
+// TestRunLoop_WithTodoStore_RestoresAndSaves 验证 WithTodoStore 的跨会话持久化行为：
+//  1. runLoop 启动时从 Session 恢复 TodoStore 状态（Session 是持久化的 source of truth）
+//  2. runLoop 结束时通过 defer 将最终状态保存回 Session
+func TestRunLoop_WithTodoStore_RestoresAndSaves(t *testing.T) {
+	p := &countingProvider{
+		responses: []func([]schema.ToolDefinition) *schema.Message{
+			func(_ []schema.ToolDefinition) *schema.Message {
+				return &schema.Message{Role: schema.RoleAssistant, Content: "done"}
+			},
+		},
+	}
+	reg := &staticRegistry{output: "ok"}
+
+	// 准备一个已有持久化 todos 的 Session（模拟上次 Run 结束后保存的状态）。
+	sess := newMemorySessionForTest("sess-1")
+	if err := sess.SaveTodos(context.Background(), []planning.TodoItem{
+		{ID: "t1", Content: "pre-existing task", Status: planning.TodoPending},
+	}); err != nil {
+		t.Fatalf("SaveTodos setup error: %v", err)
+	}
+
+	todoStore := planning.NewTodoStore()
+
+	eng := NewAgentEngine(p, reg, t.TempDir(),
+		WithTodoStore(todoStore),
+		WithSession(sess),
+	)
+	if err := eng.Run(context.Background(), "test"); err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+
+	// 验证：runLoop 启动时应从 Session 恢复 todos 到 todoStore。
+	// 恢复后 todoStore 中应有 t1（在 Run 开始时加载）。
+	// Run 结束时 defer 将（恢复后、未被修改的）todos 重新保存到 Session。
+	saved, err := sess.GetTodos(context.Background())
+	if err != nil {
+		t.Fatalf("GetTodos error: %v", err)
+	}
+	if len(saved) != 1 || saved[0].ID != "t1" {
+		t.Errorf("expected saved todos to contain t1, got %+v", saved)
+	}
+}
+
+// TestRunLoop_PlanMode_InjectsPlanPrefix 验证 Plan Mode 下用户 prompt 被注入了规划前缀。
+func TestRunLoop_PlanMode_InjectsPlanPrefix(t *testing.T) {
+	var receivedUserPrompt string
+	p := &countingProvider{
+		responses: []func([]schema.ToolDefinition) *schema.Message{
+			func(_ []schema.ToolDefinition) *schema.Message {
+				return &schema.Message{Role: schema.RoleAssistant, Content: "done"}
+			},
+		},
+	}
+	// 注入一个回调 provider 捕获历史消息内容
+	capturing := &capturingProvider{inner: p, onGenerate: func(msgs []schema.Message) {
+		for _, m := range msgs {
+			if m.Role == schema.RoleUser && receivedUserPrompt == "" {
+				receivedUserPrompt = m.Content
+			}
+		}
+	}}
+	reg := &staticRegistry{output: "ok"}
+	eng := NewAgentEngine(capturing, reg, t.TempDir(),
+		WithPlanMode(planning.PlanModePlan),
+	)
+	if err := eng.Run(context.Background(), "implement feature X"); err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+	// Plan Mode 前缀必须存在于用户消息中
+	if !strings.Contains(receivedUserPrompt, "todo_write") {
+		t.Errorf("Plan Mode should inject planning prefix mentioning todo_write, got: %q", receivedUserPrompt)
+	}
+	if !strings.Contains(receivedUserPrompt, "implement feature X") {
+		t.Errorf("original user prompt should be preserved, got: %q", receivedUserPrompt)
+	}
+}
+
+// ---- 测试辅助类型 ----
+
+// memorySessionForTest 是支持真实 GetTodos/SaveTodos 持久化语义的 Session 桩。
+// 注意：memory.MemorySession 的 SaveTodos 是 no-op、GetTodos 始终返回空列表，
+// 无法用于验证跨 runLoop 的 todo restore/save 行为，因此此处独立实现。
+type memorySessionForTest struct {
+	id    string
+	msgs  []schema.Message
+	todos []planning.TodoItem
+}
+
+func newMemorySessionForTest(id string) *memorySessionForTest {
+	return &memorySessionForTest{id: id}
+}
+
+func (s *memorySessionForTest) SessionID() string { return s.id }
+func (s *memorySessionForTest) GetMessages(_ context.Context, _ int) ([]schema.Message, error) {
+	return append([]schema.Message(nil), s.msgs...), nil
+}
+func (s *memorySessionForTest) AddMessages(_ context.Context, msgs []schema.Message) error {
+	s.msgs = append(s.msgs, msgs...)
+	return nil
+}
+func (s *memorySessionForTest) PopMessage(_ context.Context) (*schema.Message, error) {
+	if len(s.msgs) == 0 {
+		return nil, nil
+	}
+	m := s.msgs[len(s.msgs)-1]
+	s.msgs = s.msgs[:len(s.msgs)-1]
+	return &m, nil
+}
+func (s *memorySessionForTest) Clear(_ context.Context) error { s.msgs = nil; return nil }
+func (s *memorySessionForTest) GetTodos(_ context.Context) ([]planning.TodoItem, error) {
+	return append([]planning.TodoItem(nil), s.todos...), nil
+}
+func (s *memorySessionForTest) SaveTodos(_ context.Context, items []planning.TodoItem) error {
+	s.todos = append([]planning.TodoItem(nil), items...)
+	return nil
+}
+
+// capturingProvider 包装另一个 Provider，在每次 Generate 调用时执行 onGenerate 回调。
+type capturingProvider struct {
+	inner      provider.LLMProvider
+	onGenerate func(msgs []schema.Message)
+}
+
+func (p *capturingProvider) Generate(ctx context.Context, msgs []schema.Message, tools []schema.ToolDefinition) (*schema.Message, *schema.Usage, error) {
+	p.onGenerate(msgs)
+	return p.inner.Generate(ctx, msgs, tools)
+}
+func (p *capturingProvider) GenerateStream(ctx context.Context, msgs []schema.Message, tools []schema.ToolDefinition) (<-chan schema.StreamChunk, error) {
+	p.onGenerate(msgs)
+	return p.inner.GenerateStream(ctx, msgs, tools)
 }
 
 // TestRunLoop_PlanMode_FiltersWriteTools 验证 Plan Mode 下写操作工具被过滤，只读工具保留。

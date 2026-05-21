@@ -23,10 +23,10 @@ func TestBuild_BasePromptOnly(t *testing.T) {
 	if !strings.Contains(prompt, dir) {
 		t.Error("prompt should contain workDir")
 	}
-	if strings.Contains(prompt, "Project Guidelines") {
+	if strings.Contains(prompt, "项目规范") {
 		t.Error("prompt should not contain AGENTS.md section when file absent")
 	}
-	if strings.Contains(prompt, "Available Skills") {
+	if strings.Contains(prompt, "可用 Skills") {
 		t.Error("prompt should not contain skills section when index is empty")
 	}
 }
@@ -41,7 +41,7 @@ func TestBuild_WithAgentsMd(t *testing.T) {
 	b := NewPromptBuilder(dir, idx)
 	prompt := b.Build()
 
-	if !strings.Contains(prompt, "Project Guidelines") {
+	if !strings.Contains(prompt, "项目规范") {
 		t.Error("prompt should contain AGENTS.md section header")
 	}
 	if !strings.Contains(prompt, "Always write tests first.") {
@@ -72,7 +72,7 @@ func TestBuild_WithSkills(t *testing.T) {
 	b := NewPromptBuilder(dir, idx)
 	prompt := b.Build()
 
-	if !strings.Contains(prompt, "Available Skills") {
+	if !strings.Contains(prompt, "可用 Skills") {
 		t.Error("prompt should contain skills section header")
 	}
 	if !strings.Contains(prompt, "go-refactor: Go refactoring guide") {
