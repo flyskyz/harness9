@@ -203,7 +203,7 @@ harness9/
 ├── docs/核心功能/            # 技术文档
 ├── skills/                  # 示例 Skills（可直接复制到项目中使用）
 ├── AGENTS.md                # 项目开发规范（自动注入 System Prompt）
-└── CLAUDE.md -> AGENTS.md
+└── CLAUDE.md -> AGENTS.md   # 符号链接，保持同步
 ```
 
 ---
