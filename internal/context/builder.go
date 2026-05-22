@@ -18,9 +18,10 @@ import (
 // DefaultPromptBuilder 实现了 engine.PromptBuilder 接口。
 // Go 通过结构类型（Structural Typing）隐式满足接口，无需显式声明或 import engine 包。
 type DefaultPromptBuilder struct {
-	workDir     string
-	skillsIndex *skills.Index
-	todoEnabled bool
+	workDir        string
+	skillsIndex    *skills.Index
+	todoEnabled    bool
+	offloadEnabled bool
 }
 
 // NewPromptBuilder 创建绑定到指定工作目录和 Skills Index 的 PromptBuilder。
@@ -33,6 +34,13 @@ func NewPromptBuilder(workDir string, idx *skills.Index) *DefaultPromptBuilder {
 // 仅在 todo_write 已注册时调用。
 func (b *DefaultPromptBuilder) WithTodoEnabled(enabled bool) *DefaultPromptBuilder {
 	b.todoEnabled = enabled
+	return b
+}
+
+// WithOffloadEnabled 在 system prompt 中添加 context offload 检索指引。
+// 仅在 OffloadHook 已配置时调用。
+func (b *DefaultPromptBuilder) WithOffloadEnabled(enabled bool) *DefaultPromptBuilder {
+	b.offloadEnabled = enabled
 	return b
 }
 
@@ -82,6 +90,18 @@ func (b *DefaultPromptBuilder) Build() string {
 				"- 开始某步骤时，将对应条目状态更新为 `in_progress`\n"+
 				"- 完成每个步骤后，立即将状态更新为 `completed`\n"+
 				"- Todo 列表在对话上下文中持久保留 — 请保持准确",
+		)
+	}
+
+	// 5. Offload 检索指引（仅在 OffloadHook 启用时注入）
+	if b.offloadEnabled {
+		parts = append(parts,
+			"## 大输出文件检索\n\n"+
+				"当工具输出超过阈值时，完整内容会自动保存到文件系统，context 中仅显示路径引用和预览。\n"+
+				"如需查看完整输出，使用 read_file 工具并指定 offset/limit 参数分页读取：\n"+
+				"- offset：起始字节位置（默认 0）\n"+
+				"- limit：读取字节数（默认 4096）\n"+
+				"示例：read_file({\"path\": \"/path/to/offload/file.txt\", \"offset\": 4096, \"limit\": 4096})",
 		)
 	}
 

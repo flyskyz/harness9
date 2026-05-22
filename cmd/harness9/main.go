@@ -26,6 +26,7 @@ import (
 	harctx "github.com/harness9/internal/context"
 	"github.com/harness9/internal/engine"
 	"github.com/harness9/internal/env"
+	"github.com/harness9/internal/hooks"
 	"github.com/harness9/internal/logfmt"
 	"github.com/harness9/internal/memory"
 	"github.com/harness9/internal/planning"
@@ -73,7 +74,7 @@ func main() {
 	}
 
 	// 构建 System Prompt（基础 prompt + AGENTS.md + skills 索引）
-	promptBuilder := harctx.NewPromptBuilder(workDir, skillsIndex).WithTodoEnabled(true)
+	promptBuilder := harctx.NewPromptBuilder(workDir, skillsIndex).WithTodoEnabled(true).WithOffloadEnabled(true)
 
 	modelName := os.Getenv("LLM_MODEL")
 	if modelName == "" {
@@ -84,21 +85,6 @@ func main() {
 		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("创建 Provider 失败: %v", err)))
 	}
 
-	registry := tools.NewRegistry()
-	todoStore := planning.NewTodoStore()
-	for _, tool := range []tools.BaseTool{
-		tools.NewReadFileTool(workDir),
-		tools.NewWriteFileTool(workDir),
-		tools.NewBashTool(workDir),
-		tools.NewEditFileTool(workDir),
-		skills.NewUseSkillTool(skillsIndex),
-		tools.NewTodoWriteTool(todoStore),
-	} {
-		if err := registry.Register(tool); err != nil {
-			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("注册工具 %s 失败: %v", tool.Name(), err)))
-		}
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -106,7 +92,11 @@ func main() {
 	if err != nil {
 		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("获取 home 目录失败: %v", err)))
 	}
-	mgr, err := memory.NewManager(filepath.Join(homeDir, ".harness9", "sessions.db"))
+	toolResultsDir := filepath.Join(homeDir, ".harness9", "tool_results")
+	mgr, err := memory.NewManager(
+		filepath.Join(homeDir, ".harness9", "sessions.db"),
+		memory.WithToolResultsDir(toolResultsDir),
+	)
 	if err != nil {
 		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("初始化 Memory Manager 失败: %v", err)))
 	}
@@ -117,13 +107,35 @@ func main() {
 		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("创建会话失败: %v", err)))
 	}
 
+	registry := tools.NewRegistry()
+	todoStore := planning.NewTodoStore()
+	planWriter, err := hooks.NewFilePlanWriter(workDir, homeDir, sess.SessionID())
+	if err != nil {
+		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("初始化 FilePlanWriter 失败: %v", err)))
+	}
+	for _, tool := range []tools.BaseTool{
+		tools.NewReadFileTool(workDir),
+		tools.NewWriteFileTool(workDir),
+		tools.NewBashTool(workDir),
+		tools.NewEditFileTool(workDir),
+		skills.NewUseSkillTool(skillsIndex),
+		tools.NewTodoWriteTool(todoStore, tools.WithPlanWriter(planWriter)),
+	} {
+		if err := registry.Register(tool); err != nil {
+			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("注册工具 %s 失败: %v", tool.Name(), err)))
+		}
+	}
+
+	offloadHook := hooks.NewOffloadHook(toolResultsDir, sess.SessionID())
+	hookReg := hooks.NewHookRegistry(registry, offloadHook)
+
 	modelLimits := provider.GetModelLimits(modelName)
 	// SummarizationCompactor 使用同一 LLM 生成摘要，内置 TokenBudgetCompactor 作为错误回退。
 	compactor := memory.NewSummarizationCompactor(llm, modelLimits.ContextTokens,
 		memory.WithTodoInjector(todoStore),
 	)
 
-	eng := engine.NewAgentEngine(llm, registry, workDir,
+	eng := engine.NewAgentEngine(llm, hookReg, workDir,
 		engine.WithPromptBuilder(promptBuilder),
 		engine.WithSession(sess),
 		engine.WithCompactor(compactor),
