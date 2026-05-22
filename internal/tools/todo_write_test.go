@@ -3,6 +3,7 @@ package tools_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/harness9/internal/planning"
@@ -273,5 +274,83 @@ func TestTodoWriteTool_BulkNewItemCompleted(t *testing.T) {
 	_, err := tool.Execute(context.Background(), args)
 	if err == nil {
 		t.Error("expected error when creating 2 new items as completed, got nil")
+	}
+}
+
+// mockPlanWriter 记录 Write 调用次数和最后收到的 todos。
+type mockPlanWriter struct {
+	calls int
+	last  []planning.TodoItem
+	err   error
+}
+
+func (m *mockPlanWriter) Write(todos []planning.TodoItem) error {
+	m.calls++
+	m.last = todos
+	return m.err
+}
+
+func TestTodoWriteTool_PlanWriterCalledOnWrite(t *testing.T) {
+	store := planning.NewTodoStore()
+	pw := &mockPlanWriter{}
+	tool := tools.NewTodoWriteTool(store, tools.WithPlanWriter(pw))
+
+	args, _ := json.Marshal(map[string]interface{}{
+		"todos": []map[string]string{
+			{"id": "1", "content": "task", "status": "pending"},
+		},
+	})
+	if _, err := tool.Execute(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+
+	if pw.calls != 1 {
+		t.Errorf("PlanWriter.Write should be called once, called %d times", pw.calls)
+	}
+	if len(pw.last) != 1 || pw.last[0].Content != "task" {
+		t.Errorf("PlanWriter received wrong todos: %v", pw.last)
+	}
+}
+
+func TestTodoWriteTool_PlanWriterNotCalledOnRead(t *testing.T) {
+	store := planning.NewTodoStore()
+	pw := &mockPlanWriter{}
+	tool := tools.NewTodoWriteTool(store, tools.WithPlanWriter(pw))
+
+	// Read operation (no todos field) should NOT call PlanWriter
+	if _, err := tool.Execute(context.Background(), json.RawMessage(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	if pw.calls != 0 {
+		t.Errorf("PlanWriter.Write must not be called on read operation")
+	}
+}
+
+func TestTodoWriteTool_PlanWriterNil_NoChange(t *testing.T) {
+	store := planning.NewTodoStore()
+	// No WithPlanWriter option — should behave identically to original
+	tool := tools.NewTodoWriteTool(store)
+	args, _ := json.Marshal(map[string]interface{}{
+		"todos": []map[string]string{{"id": "1", "content": "x", "status": "pending"}},
+	})
+	if _, err := tool.Execute(context.Background(), args); err != nil {
+		t.Fatalf("tool without PlanWriter should still work: %v", err)
+	}
+}
+
+func TestTodoWriteTool_PlanWriterError_DoesNotAffectResult(t *testing.T) {
+	store := planning.NewTodoStore()
+	pw := &mockPlanWriter{err: errors.New("disk full")}
+	tool := tools.NewTodoWriteTool(store, tools.WithPlanWriter(pw))
+
+	args, _ := json.Marshal(map[string]interface{}{
+		"todos": []map[string]string{{"id": "1", "content": "x", "status": "pending"}},
+	})
+	result, err := tool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("PlanWriter error should not propagate: %v", err)
+	}
+	if result == "" {
+		t.Error("result should not be empty even when PlanWriter fails")
 	}
 }

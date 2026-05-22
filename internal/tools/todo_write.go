@@ -17,23 +17,40 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
+	"github.com/harness9/internal/logfmt"
 	"github.com/harness9/internal/planning"
 	"github.com/harness9/internal/schema"
 )
+
+// TodoWriteOption 配置 TodoWriteTool 的可选行为。
+type TodoWriteOption func(*TodoWriteTool)
+
+// WithPlanWriter 注入 PlanWriter，每次写入 TodoStore 成功后调用 Write。
+// pw 为 nil 时等同于不注入（无操作）。
+func WithPlanWriter(pw planning.PlanWriter) TodoWriteOption {
+	return func(t *TodoWriteTool) { t.planWriter = pw }
+}
 
 // TodoWriteTool 实现 BaseTool 接口，允许 LLM 维护当前会话的任务列表。
 // 内部通过 *planning.TodoStore 存取任务状态，TodoStore 本身是线程安全的。
 // 传入 todos 数组时全量替换并执行防作弊校验；省略 todos 时仅读取当前列表。
 type TodoWriteTool struct {
 	// store 是会话内共享的任务存储，由 main.go 创建后注入引擎和此工具。
-	store *planning.TodoStore
+	store      *planning.TodoStore
+	planWriter planning.PlanWriter // 可选，nil 时跳过
 }
 
 // NewTodoWriteTool 创建绑定到指定 TodoStore 的工具实例。
 // store 不得为 nil，否则 Execute 调用时会发生 panic。
-func NewTodoWriteTool(store *planning.TodoStore) *TodoWriteTool {
-	return &TodoWriteTool{store: store}
+// opts 为可选配置，当前支持 WithPlanWriter 注入计划文件写入器。
+func NewTodoWriteTool(store *planning.TodoStore, opts ...TodoWriteOption) *TodoWriteTool {
+	t := &TodoWriteTool{store: store}
+	for _, opt := range opts {
+		opt(t)
+	}
+	return t
 }
 
 func (t *TodoWriteTool) Name() string { return "todo_write" }
@@ -135,6 +152,11 @@ func (t *TodoWriteTool) Execute(_ context.Context, args json.RawMessage) (string
 				directCompletions)
 		}
 		current = t.store.Write(input.Todos)
+		if t.planWriter != nil {
+			if err := t.planWriter.Write(current); err != nil {
+				log.Print(logfmt.FormatMsg("todo_write", fmt.Sprintf("写入计划文件失败: %v", err)))
+			}
+		}
 	} else {
 		// 读操作：不修改 TodoStore，直接返回当前快照。
 		current = t.store.Read()
