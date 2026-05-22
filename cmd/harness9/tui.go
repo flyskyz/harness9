@@ -107,10 +107,13 @@ type tuiModel struct {
 	verbIdx   int // 0-5，当前动词索引
 	tickCount int // TickMsg 计数，每 30 次递增 verbIdx
 
-	// 当前工具跟踪（用于耗时展示）
-	currentTool string
-	toolStart   time.Time
-	toolArgs    json.RawMessage
+	// 当前工具跟踪（用于 spinner 展示）
+	// currentTool/toolArgs/toolStart 仅记录最近一次 EventToolStart 的信息，供 spinner 显示用。
+	// 并发工具完成时的准确信息由 pendingTools 按 ToolCallID 索引，避免单变量覆盖。
+	currentTool  string
+	toolStart    time.Time
+	toolArgs     json.RawMessage
+	pendingTools map[string]pendingToolInfo // ToolCallID → 启动信息
 
 	// Markdown 流式渲染状态：
 	// streaming 期间将 delta 追加到 pendingReply，
@@ -169,6 +172,13 @@ type tuiModel struct {
 	autoExecStuck int
 }
 
+// pendingToolInfo 记录单个并发工具调用的启动信息，用于 EventToolResult 时精确还原名称和耗时。
+type pendingToolInfo struct {
+	name  string
+	args  json.RawMessage
+	start time.Time
+}
+
 // newTUIModel 构造已初始化的 tuiModel：输入框聚焦，spinner 使用 Dot 样式。
 func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, mgr *memory.Manager, sess memory.Session, todoStore *planning.TodoStore, outerCtx context.Context, workDir, modelName string) tuiModel {
 	sp := spinner.New()
@@ -195,6 +205,7 @@ func newTUIModel(eng *engine.AgentEngine, idx *skills.Index, mgr *memory.Manager
 		todoStore:     todoStore,
 		planMode:      planning.PlanModeDefault,
 		planReviewing: false,
+		pendingTools:  make(map[string]pendingToolInfo),
 	}
 	if sess != nil {
 		m.sessionID = sess.SessionID()

@@ -257,6 +257,12 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		// 工具启动前先渲染当前累积的文本块
 		m = m.flushPendingReply()
 		tc, _ := evt.Data.(schema.ToolCall)
+		// 按 ID 存入 pendingTools，防止并发工具互相覆盖
+		if m.pendingTools == nil {
+			m.pendingTools = make(map[string]pendingToolInfo)
+		}
+		m.pendingTools[tc.ID] = pendingToolInfo{name: tc.Name, args: tc.Arguments, start: time.Now()}
+		// 同时更新 currentTool/toolArgs/toolStart 供 spinner 展示（始终展示最近启动的工具）
 		m.currentTool = tc.Name
 		m.toolStart = time.Now()
 		m.toolArgs = tc.Arguments
@@ -264,13 +270,28 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 
 	case engine.EventToolResult:
 		result, _ := evt.Data.(schema.ToolResult)
-		elapsed := time.Since(m.toolStart).Round(time.Millisecond)
+
+		// 从 pendingTools 按 ToolCallID 精准取回启动信息，避免并发覆盖导致名称丢失
+		var toolName string
+		var toolArgs json.RawMessage
+		var elapsed time.Duration
+		if info, ok := m.pendingTools[result.ToolCallID]; ok {
+			toolName = info.name
+			toolArgs = info.args
+			elapsed = time.Since(info.start).Round(time.Millisecond)
+			delete(m.pendingTools, result.ToolCallID)
+		} else {
+			// 兜底：pendingTools 查不到时退回旧逻辑
+			toolName = m.currentTool
+			toolArgs = m.toolArgs
+			elapsed = time.Since(m.toolStart).Round(time.Millisecond)
+		}
 
 		// 工具完成行：展示 tool_name(args摘要) — 耗时
-		summary := summarizeTool(m.currentTool, m.toolArgs)
-		display := m.currentTool
+		summary := summarizeTool(toolName, toolArgs)
+		display := toolName
 		if summary != "" {
-			display = fmt.Sprintf("%s(%s)", m.currentTool, summary)
+			display = fmt.Sprintf("%s(%s)", toolName, summary)
 		}
 		var line string
 		if result.IsError {
@@ -281,13 +302,16 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		m.lines = append(m.lines, line)
 
 		// todo_write 完成后，在工具行下方追加最新 todo 快照
-		if m.currentTool == "todo_write" && !result.IsError && m.todoStore != nil {
+		if toolName == "todo_write" && !result.IsError && m.todoStore != nil {
 			m = m.updateTodoBlock()
 		}
 
 		m.pendingReplyStart = len(m.lines)
-		m.currentTool = ""
-		m.toolArgs = nil
+		// 当所有并发工具均已完成时才清空 spinner 状态
+		if len(m.pendingTools) == 0 {
+			m.currentTool = ""
+			m.toolArgs = nil
+		}
 		return m, readNextEvent(m.eventCh)
 
 	case engine.EventDone:
