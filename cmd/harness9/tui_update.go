@@ -258,9 +258,6 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		m = m.flushPendingReply()
 		tc, _ := evt.Data.(schema.ToolCall)
 		// 按 ID 存入 pendingTools，防止并发工具互相覆盖
-		if m.pendingTools == nil {
-			m.pendingTools = make(map[string]pendingToolInfo)
-		}
 		m.pendingTools[tc.ID] = pendingToolInfo{name: tc.Name, args: tc.Arguments}
 		// 同时更新 currentTool/toolArgs/toolStart 供 spinner 展示（始终展示最近启动的工具）
 		m.currentTool = tc.Name

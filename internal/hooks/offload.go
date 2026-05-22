@@ -36,18 +36,19 @@ func WithPreviewLines(n int) OffloadOption {
 }
 
 // OffloadHook 将超大工具输出写入文件系统，替换为摘要引用和预览内容。
-// 使 LLM context 不因单次大输出爆炸，完整数据通过 read_file 可检索。
+// 文件写入 {workDir}/.harness9/tool_results/{sessionID}/{toolCallID}.txt，
+// 摘要中展示相对于 workDir 的相对路径，确保 LLM 可通过 read_file 工具读回。
 type OffloadHook struct {
-	baseDir      string
+	workDir      string // Agent 工作区根目录，offload 文件写入其 .harness9 子目录
 	sessionID    string
 	threshold    int
 	previewLines int
 }
 
-// NewOffloadHook 创建写入 baseDir/sessionID/ 的 OffloadHook。
-func NewOffloadHook(baseDir, sessionID string, opts ...OffloadOption) *OffloadHook {
+// NewOffloadHook 创建写入 workDir/.harness9/tool_results/sessionID/ 的 OffloadHook。
+func NewOffloadHook(workDir, sessionID string, opts ...OffloadOption) *OffloadHook {
 	h := &OffloadHook{
-		baseDir:      baseDir,
+		workDir:      workDir,
 		sessionID:    sessionID,
 		threshold:    defaultThreshold,
 		previewLines: defaultPreviewLines,
@@ -64,6 +65,7 @@ func (h *OffloadHook) BeforeExecute(ctx context.Context, tc schema.ToolCall) (co
 }
 
 // AfterExecute 检测输出大小，超阈值时写入文件并替换 result.Output 为摘要引用。
+// 文件路径在 workDir 内，摘要中展示相对路径，LLM 可直接用 read_file 工具读取。
 // 写入失败时 fail-open：原样返回原始结果，不中断 agent loop。
 func (h *OffloadHook) AfterExecute(_ context.Context, tc schema.ToolCall, result schema.ToolResult) schema.ToolResult {
 	if offloadExcluded[tc.Name] {
@@ -73,14 +75,24 @@ func (h *OffloadHook) AfterExecute(_ context.Context, tc schema.ToolCall, result
 	if len(originalOutput) <= h.threshold {
 		return result
 	}
+	// tc.ID 为空时无法生成稳定文件名，跳过 offload
+	if tc.ID == "" {
+		return result
+	}
 
-	dir := filepath.Join(h.baseDir, h.sessionID)
+	dir := filepath.Join(h.workDir, ".harness9", "tool_results", h.sessionID)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return result
 	}
-	path := filepath.Join(dir, tc.ID+".txt")
-	if err := os.WriteFile(path, []byte(originalOutput), 0600); err != nil {
+	absPath := filepath.Join(dir, tc.ID+".txt")
+	if err := os.WriteFile(absPath, []byte(originalOutput), 0600); err != nil {
 		return result
+	}
+
+	// 展示相对于 workDir 的路径，使 LLM 可直接传给 read_file（沙箱内可访问）
+	relPath, err := filepath.Rel(h.workDir, absPath)
+	if err != nil {
+		relPath = absPath
 	}
 
 	lines := strings.Split(originalOutput, "\n")
@@ -95,7 +107,7 @@ func (h *OffloadHook) AfterExecute(_ context.Context, tc schema.ToolCall, result
 		"[输出已保存至 %s，共 %d 行 / %d 字节。\n"+
 			"可通过 read_file 工具配合 offset/limit 参数分页读取。\n\n"+
 			"预览（前 %d 行）：\n%s\n...（已截断）]",
-		path, totalLines, len(originalOutput), previewEnd, preview,
+		relPath, totalLines, len(originalOutput), previewEnd, preview,
 	)
 	return result
 }

@@ -12,8 +12,8 @@ import (
 )
 
 func TestOffloadHook_BelowThreshold_NoOffload(t *testing.T) {
-	dir := t.TempDir()
-	h := hooks.NewOffloadHook(dir, "sess1", hooks.WithThreshold(100))
+	workDir := t.TempDir()
+	h := hooks.NewOffloadHook(workDir, "sess1", hooks.WithThreshold(100))
 	tc := schema.ToolCall{Name: "bash", ID: "tc1"}
 	result := schema.ToolResult{ToolCallID: "tc1", Output: "short output"}
 
@@ -21,16 +21,16 @@ func TestOffloadHook_BelowThreshold_NoOffload(t *testing.T) {
 	if got.Output != "short output" {
 		t.Errorf("output should be unchanged below threshold, got %q", got.Output)
 	}
-	// No file should be created
-	entries, _ := os.ReadDir(filepath.Join(dir, "sess1"))
+	// No offload directory should be created
+	entries, _ := os.ReadDir(filepath.Join(workDir, ".harness9", "tool_results", "sess1"))
 	if len(entries) != 0 {
 		t.Error("no file should be written below threshold")
 	}
 }
 
 func TestOffloadHook_AboveThreshold_WritesFile(t *testing.T) {
-	dir := t.TempDir()
-	h := hooks.NewOffloadHook(dir, "sess1", hooks.WithThreshold(10), hooks.WithPreviewLines(2))
+	workDir := t.TempDir()
+	h := hooks.NewOffloadHook(workDir, "sess1", hooks.WithThreshold(10), hooks.WithPreviewLines(2))
 
 	large := strings.Repeat("line\n", 50) // 250 chars, well above threshold=10
 	tc := schema.ToolCall{Name: "bash", ID: "tc2"}
@@ -38,19 +38,20 @@ func TestOffloadHook_AboveThreshold_WritesFile(t *testing.T) {
 
 	got := h.AfterExecute(context.Background(), tc, result)
 
-	// Output should mention the file path
-	expectedPath := filepath.Join(dir, "sess1", "tc2.txt")
-	if !strings.Contains(got.Output, expectedPath) {
-		t.Errorf("output should contain file path %q, got %q", expectedPath, got.Output)
-	}
-
-	// File should exist with original content
-	content, err := os.ReadFile(expectedPath)
+	// File should exist at {workDir}/.harness9/tool_results/sess1/tc2.txt
+	expectedFile := filepath.Join(workDir, ".harness9", "tool_results", "sess1", "tc2.txt")
+	content, err := os.ReadFile(expectedFile)
 	if err != nil {
 		t.Fatalf("offload file not created: %v", err)
 	}
 	if string(content) != large {
 		t.Error("offload file content should match original output")
+	}
+
+	// Output should contain the relative path (accessible via read_file sandbox)
+	expectedRelPath := filepath.Join(".harness9", "tool_results", "sess1", "tc2.txt")
+	if !strings.Contains(got.Output, expectedRelPath) {
+		t.Errorf("output should contain relative path %q, got %q", expectedRelPath, got.Output)
 	}
 
 	// Output should contain preview (2 lines)
@@ -59,9 +60,23 @@ func TestOffloadHook_AboveThreshold_WritesFile(t *testing.T) {
 	}
 }
 
+func TestOffloadHook_EmptyToolCallID_NoOffload(t *testing.T) {
+	workDir := t.TempDir()
+	h := hooks.NewOffloadHook(workDir, "sess1", hooks.WithThreshold(1))
+
+	large := strings.Repeat("x", 100)
+	tc := schema.ToolCall{Name: "bash", ID: ""} // empty ID
+	result := schema.ToolResult{Output: large}
+
+	got := h.AfterExecute(context.Background(), tc, result)
+	if got.Output != large {
+		t.Error("empty tc.ID should skip offload and return original output unchanged")
+	}
+}
+
 func TestOffloadHook_ExcludedTools_NoOffload(t *testing.T) {
-	dir := t.TempDir()
-	h := hooks.NewOffloadHook(dir, "sess1", hooks.WithThreshold(1))
+	workDir := t.TempDir()
+	h := hooks.NewOffloadHook(workDir, "sess1", hooks.WithThreshold(1))
 
 	large := strings.Repeat("x", 100)
 	for _, toolName := range []string{"read_file", "write_file", "edit_file"} {
@@ -75,16 +90,16 @@ func TestOffloadHook_ExcludedTools_NoOffload(t *testing.T) {
 }
 
 func TestOffloadHook_WriteFailure_ReturnsOriginal(t *testing.T) {
-	// Use a non-existent root that can't be created (file instead of dir)
-	f, err := os.CreateTemp("", "not-a-dir")
+	workDir := t.TempDir()
+	// Block MkdirAll by placing a file where the .harness9 directory would be
+	harnessPath := filepath.Join(workDir, ".harness9")
+	f, err := os.Create(harnessPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.Close()
-	defer os.Remove(f.Name())
 
-	// Use file path as base dir — MkdirAll will fail because it's a file
-	h := hooks.NewOffloadHook(f.Name(), "sess1", hooks.WithThreshold(1))
+	h := hooks.NewOffloadHook(workDir, "sess1", hooks.WithThreshold(1))
 	tc := schema.ToolCall{Name: "bash", ID: "tc-fail"}
 	original := strings.Repeat("x", 100)
 	result := schema.ToolResult{Output: original}

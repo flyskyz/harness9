@@ -101,7 +101,7 @@ func (b *DefaultPromptBuilder) Build() string {
 				"如需查看完整输出，使用 read_file 工具并指定 offset/limit 参数分页读取：\n"+
 				"- offset：起始字节位置（默认 0）\n"+
 				"- limit：读取字节数（默认 4096）\n"+
-				"示例：read_file({\"path\": \"/path/to/offload/file.txt\", \"offset\": 4096, \"limit\": 4096})",
+				"示例：read_file({\"path\": \".harness9/tool_results/{sessionID}/{toolCallID}.txt\", \"offset\": 4096, \"limit\": 4096})",
 		)
 	}
 

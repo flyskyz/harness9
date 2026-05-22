@@ -27,9 +27,9 @@ type HookRegistry struct {
 	hooks []ToolHook
 }
 
-// NewHookRegistry 创建包装 inner 的 HookRegistry，依次应用给定的 hooks。
-func NewHookRegistry(inner tools.Registry, hooks ...ToolHook) *HookRegistry {
-	return &HookRegistry{inner: inner, hooks: hooks}
+// NewHookRegistry 创建包装 inner 的 HookRegistry，依次应用给定的拦截器。
+func NewHookRegistry(inner tools.Registry, hs ...ToolHook) *HookRegistry {
+	return &HookRegistry{inner: inner, hooks: hs}
 }
 
 // Register 直接委托给内层 Registry。

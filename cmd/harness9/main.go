@@ -92,7 +92,7 @@ func main() {
 	if err != nil {
 		log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("获取 home 目录失败: %v", err)))
 	}
-	toolResultsDir := filepath.Join(homeDir, ".harness9", "tool_results")
+	toolResultsDir := filepath.Join(workDir, ".harness9", "tool_results")
 	mgr, err := memory.NewManager(
 		filepath.Join(homeDir, ".harness9", "sessions.db"),
 		memory.WithToolResultsDir(toolResultsDir),
@@ -126,7 +126,7 @@ func main() {
 		}
 	}
 
-	offloadHook := hooks.NewOffloadHook(toolResultsDir, sess.SessionID())
+	offloadHook := hooks.NewOffloadHook(workDir, sess.SessionID())
 	hookReg := hooks.NewHookRegistry(registry, offloadHook)
 
 	modelLimits := provider.GetModelLimits(modelName)
